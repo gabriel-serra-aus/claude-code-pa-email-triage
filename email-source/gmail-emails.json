@@ -1,0 +1,52 @@
+[
+  {
+    "id": "gmail-001",
+    "date": "2026-03-28T09:15:00Z",
+    "subject": "Q1 Budget Review — Action Required",
+    "from": "Sarah Connor <sarah.connor@company.com>",
+    "summary": "Sarah is requesting approval on the Q1 budget before end of week.",
+    "action": "Approve or reply with feedback",
+    "category": "Important",
+    "isFlagged": false
+  },
+  {
+    "id": "gmail-002",
+    "date": "2026-03-27T14:30:00Z",
+    "subject": "Weekly Newsletter — March Edition",
+    "from": "newsletter@techdigest.com",
+    "summary": "This week's top stories in tech and AI.",
+    "action": "Read when time permits",
+    "category": "FYI",
+    "isFlagged": false
+  },
+  {
+    "id": "gmail-003",
+    "date": "2026-03-27T08:00:00Z",
+    "subject": "50% Off This Weekend Only!",
+    "from": "deals@retailstore.com",
+    "summary": "Promotional offer for a weekend sale.",
+    "action": "No action needed",
+    "category": "Not Important",
+    "isFlagged": false
+  },
+  {
+    "id": "gmail-004",
+    "date": "2026-03-26T16:45:00Z",
+    "subject": "Invoice #4821 from AWS",
+    "from": "billing@amazon.com",
+    "summary": "Monthly AWS invoice for $342.50, due April 15.",
+    "action": "Review and file",
+    "category": "FYI",
+    "isFlagged": true
+  },
+  {
+    "id": "gmail-005",
+    "date": "2026-03-26T11:00:00Z",
+    "subject": "Can we schedule a call this week?",
+    "from": "Michael Chen <m.chen@clientco.com>",
+    "summary": "Client is asking to schedule a call to discuss the project proposal.",
+    "action": "Reply with availability",
+    "category": "Important",
+    "isFlagged": true
+  }
+]

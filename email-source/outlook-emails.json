@@ -1,0 +1,42 @@
+[
+  {
+    "id": "outlook-001",
+    "date": "2026-03-28T10:00:00Z",
+    "subject": "Contract renewal — please review",
+    "from": "Legal Team <legal@company.com>",
+    "summary": "Legal is requesting a signature on the renewed supplier contract by Friday.",
+    "action": "Review and sign",
+    "category": "Important",
+    "isFlagged": false
+  },
+  {
+    "id": "outlook-002",
+    "date": "2026-03-27T13:00:00Z",
+    "subject": "Team standup notes — 27 Mar",
+    "from": "Scrum Bot <scrumbot@company.com>",
+    "summary": "Automated summary of today's standup: no blockers reported.",
+    "action": "No action needed",
+    "category": "FYI",
+    "isFlagged": false
+  },
+  {
+    "id": "outlook-003",
+    "date": "2026-03-27T09:30:00Z",
+    "subject": "LinkedIn: 5 new connection requests",
+    "from": "notifications@linkedin.com",
+    "summary": "LinkedIn digest of pending connection requests.",
+    "action": "No action needed",
+    "category": "Not Important",
+    "isFlagged": false
+  },
+  {
+    "id": "outlook-004",
+    "date": "2026-03-26T08:15:00Z",
+    "subject": "Quarterly report ready for your review",
+    "from": "Finance <finance@company.com>",
+    "summary": "The Q1 quarterly report has been finalised and is ready for review.",
+    "action": "Review document",
+    "category": "Important",
+    "isFlagged": false
+  }
+]

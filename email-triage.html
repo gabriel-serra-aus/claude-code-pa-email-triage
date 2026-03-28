@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Email Triage</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      background: #f0f2f5;
+      color: #1a1a2e;
+    }
+
+    /* ── Header ───────────────────────────────────────────────────── */
+    header {
+      background: #1a1a2e;
+      color: #fff;
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+    header h1 { font-size: 18px; font-weight: 600; letter-spacing: 0.3px; }
+    header .meta { font-size: 12px; color: #8899aa; margin-top: 2px; }
+
+    .btn-save {
+      background: #4f8ef7;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 9px 20px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn-save:hover { background: #3a78e8; }
+    .btn-save:disabled { background: #556; cursor: not-allowed; opacity: 0.6; }
+
+    /* ── Load error banner ───────────────────────────────────────── */
+    #load-error {
+      display: none;
+      background: #fff3cd;
+      border-left: 4px solid #f0ad4e;
+      padding: 14px 32px;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    #load-error strong { display: block; margin-bottom: 4px; }
+    #load-error code { background: #f8f8f8; padding: 1px 5px; border-radius: 3px; font-size: 12px; }
+
+    /* ── Toast notification ──────────────────────────────────────── */
+    #toast {
+      position: fixed;
+      bottom: 28px;
+      right: 28px;
+      background: #1a1a2e;
+      color: #fff;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 13px;
+      opacity: 0;
+      transform: translateY(8px);
+      transition: opacity 0.2s, transform 0.2s;
+      pointer-events: none;
+      z-index: 999;
+    }
+    #toast.show { opacity: 1; transform: translateY(0); }
+
+    /* ── Main layout ─────────────────────────────────────────────── */
+    main { padding: 28px 32px; max-width: 1400px; margin: 0 auto; }
+
+    /* ── Section ─────────────────────────────────────────────────── */
+    .section {
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      margin-bottom: 32px;
+      overflow: hidden;
+    }
+
+    .section-header {
+      padding: 16px 20px 14px;
+      border-bottom: 1px solid #eef0f3;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .section-title {
+      font-size: 15px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .section-title .account { font-size: 11px; font-weight: 400; color: #778; }
+
+    .badge-count {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 20px;
+      background: #e8ecf5;
+      color: #445;
+    }
+
+    /* ── Filter bar ──────────────────────────────────────────────── */
+    .filters { display: flex; gap: 6px; margin-left: auto; }
+
+    .filter-btn {
+      border: 1px solid #dde1ea;
+      background: #fff;
+      color: #556;
+      border-radius: 20px;
+      padding: 4px 13px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.12s;
+    }
+    .filter-btn:hover { background: #f0f2f8; }
+    .filter-btn.active { background: #1a1a2e; color: #fff; border-color: #1a1a2e; }
+    .filter-btn.f-important.active { background: #c62828; border-color: #c62828; }
+    .filter-btn.f-fyi.active { background: #1565c0; border-color: #1565c0; }
+    .filter-btn.f-notimportant.active { background: #555; border-color: #555; }
+
+    /* ── Table ───────────────────────────────────────────────────── */
+    .table-wrap { overflow-x: auto; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    thead tr {
+      background: #f7f8fa;
+      border-bottom: 2px solid #eef0f3;
+    }
+
+    th {
+      padding: 10px 12px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #778;
+      white-space: nowrap;
+    }
+    th.sortable { cursor: pointer; user-select: none; }
+    th.sortable:hover { color: #334; }
+    th .sort-icon { margin-left: 4px; opacity: 0.4; }
+    th.sorted .sort-icon { opacity: 1; color: #4f8ef7; }
+
+    tbody tr {
+      border-bottom: 1px solid #f0f2f5;
+      transition: background 0.1s;
+    }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { filter: brightness(0.97); }
+
+    /* Row colours by category */
+    tr.cat-important  { background: #fce4ec; }
+    tr.cat-fyi        { background: #e3f2fd; }
+    tr.cat-notimportant { background: #f5f5f5; }
+
+    td {
+      padding: 10px 12px;
+      vertical-align: top;
+      font-size: 13px;
+    }
+
+    td.date-cell { white-space: nowrap; color: #556; font-size: 12px; }
+
+    td.subject-cell { font-weight: 500; min-width: 200px; }
+
+    td.from-cell { color: #334; min-width: 160px; }
+    .from-name { font-weight: 500; }
+    .from-email { font-size: 11px; color: #778; }
+
+    td.summary-cell { color: #445; min-width: 220px; line-height: 1.5; }
+
+    td.action-cell { color: #556; font-style: italic; min-width: 160px; font-size: 12px; }
+
+    /* ── Category dropdown ───────────────────────────────────────── */
+    .cat-select {
+      border: 1px solid #dde1ea;
+      border-radius: 5px;
+      padding: 4px 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      background: #fff;
+      min-width: 120px;
+    }
+    .cat-select.cat-important  { border-color: #e57373; color: #c62828; background: #fff8f8; }
+    .cat-select.cat-fyi        { border-color: #64b5f6; color: #1565c0; background: #f0f8ff; }
+    .cat-select.cat-notimportant { border-color: #bbb; color: #555; background: #fafafa; }
+
+    /* ── Status cell ─────────────────────────────────────────────── */
+    td.status-cell { min-width: 140px; }
+
+    .status-current {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 10px;
+      margin-bottom: 5px;
+    }
+    .status-current.is-flagged  { background: #fff3e0; color: #e65100; border: 1px solid #ffcc80; }
+    .status-current.not-flagged { background: #f5f5f5; color: #888; border: 1px solid #ddd; }
+
+    .status-will {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 10px;
+    }
+    .status-will.will-flag { background: #fce4ec; color: #c62828; border: 1px solid #ef9a9a; }
+    .status-will.will-move { background: #e3f2fd; color: #1565c0; border: 1px solid #90caf9; }
+
+    .status-block { display: flex; flex-direction: column; gap: 4px; }
+
+    /* ── Empty / loading states ──────────────────────────────────── */
+    .empty-row td {
+      text-align: center;
+      padding: 32px;
+      color: #aaa;
+      font-style: italic;
+    }
+
+    /* ── Bottom save bar ─────────────────────────────────────────── */
+    .save-bar {
+      background: #fff;
+      border-top: 1px solid #eef0f3;
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      bottom: 0;
+      box-shadow: 0 -2px 8px rgba(0,0,0,0.06);
+    }
+    .save-bar .summary { font-size: 13px; color: #556; }
+    .save-bar .summary span { font-weight: 700; color: #1a1a2e; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Email Triage</h1>
+    <div class="meta" id="last-loaded">No data loaded</div>
+  </div>
+  <button class="btn-save" id="saveBtn-top" onclick="saveActions()">Save Flag &amp; Archive Script</button>
+</header>
+
+<div id="load-error">
+  <strong>Could not load email JSON files automatically.</strong>
+  This page must be served via a local server to load JSON files.<br>
+  Run <code>python -m http.server 8080</code> in the project root, then open
+  <code>http://localhost:8080/email-triage.html</code>
+</div>
+
+<main>
+  <div class="section" id="gmail-section">
+    <div class="section-header">
+      <div class="section-title">
+        Gmail
+        <span class="account">gabrielserraaus@gmail.com</span>
+        <span class="badge-count" id="gmail-count">0</span>
+      </div>
+      <div class="filters" id="gmail-filters">
+        <button class="filter-btn active" onclick="setFilter('gmail','All')">All</button>
+        <button class="filter-btn f-important" onclick="setFilter('gmail','Important')">Important</button>
+        <button class="filter-btn f-fyi" onclick="setFilter('gmail','FYI')">FYI</button>
+        <button class="filter-btn f-notimportant" onclick="setFilter('gmail','Not Important')">Not Important</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th class="sortable" onclick="setSort('gmail','date')">Date <span class="sort-icon">↕</span></th>
+            <th>Subject</th>
+            <th class="sortable" onclick="setSort('gmail','from')">From <span class="sort-icon">↕</span></th>
+            <th>Summary</th>
+            <th>Action</th>
+            <th>Category</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="gmail-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="section" id="outlook-section">
+    <div class="section-header">
+      <div class="section-title">
+        Outlook
+        <span class="account">gabriel.serra@outlook.com.au</span>
+        <span class="badge-count" id="outlook-count">0</span>
+      </div>
+      <div class="filters" id="outlook-filters">
+        <button class="filter-btn active" onclick="setFilter('outlook','All')">All</button>
+        <button class="filter-btn f-important" onclick="setFilter('outlook','Important')">Important</button>
+        <button class="filter-btn f-fyi" onclick="setFilter('outlook','FYI')">FYI</button>
+        <button class="filter-btn f-notimportant" onclick="setFilter('outlook','Not Important')">Not Important</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th class="sortable" onclick="setSort('outlook','date')">Date <span class="sort-icon">↕</span></th>
+            <th>Subject</th>
+            <th class="sortable" onclick="setSort('outlook','from')">From <span class="sort-icon">↕</span></th>
+            <th>Summary</th>
+            <th>Action</th>
+            <th>Category</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="outlook-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<div class="save-bar">
+  <div class="summary" id="action-summary">—</div>
+  <button class="btn-save" id="saveBtn-bottom" onclick="saveActions()">Save Flag &amp; Archive Script</button>
+</div>
+
+<div id="toast"></div>
+
+<script>
+  // ── State ────────────────────────────────────────────────────────────────
+  const state = {
+    gmail:   { emails: [], sort: { col: 'date', dir: 'desc' }, filter: 'All' },
+    outlook: { emails: [], sort: { col: 'date', dir: 'desc' }, filter: 'All' }
+  };
+
+  // ── Load ─────────────────────────────────────────────────────────────────
+  async function loadEmails() {
+    let anyError = false;
+
+    for (const src of ['gmail', 'outlook']) {
+      const path = `email-source/${src}-emails.json`;
+      try {
+        const res = await fetch(path);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        // Deep-copy so mutations don't affect original
+        state[src].emails = data.map(e => ({ ...e }));
+      } catch (err) {
+        console.warn(`[${src}] Failed to load ${path}:`, err.message);
+        anyError = true;
+      }
+    }
+
+    if (anyError) {
+      document.getElementById('load-error').style.display = 'block';
+    }
+
+    const now = new Date().toLocaleString('en-AU', { dateStyle: 'medium', timeStyle: 'short' });
+    document.getElementById('last-loaded').textContent = `Last loaded: ${now}`;
+
+    render('gmail');
+    render('outlook');
+    updateActionSummary();
+  }
+
+  // ── Render ───────────────────────────────────────────────────────────────
+  function render(src) {
+    const { emails, sort, filter } = state[src];
+
+    // Filter
+    let visible = filter === 'All' ? emails : emails.filter(e => e.category === filter);
+
+    // Sort
+    visible = [...visible].sort((a, b) => {
+      let va = sort.col === 'date' ? a.date : a.from.toLowerCase();
+      let vb = sort.col === 'date' ? b.date : b.from.toLowerCase();
+      if (va < vb) return sort.dir === 'asc' ? -1 : 1;
+      if (va > vb) return sort.dir === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    const tbody = document.getElementById(`${src}-tbody`);
+    tbody.innerHTML = '';
+
+    if (visible.length === 0) {
+      const tr = document.createElement('tr');
+      tr.className = 'empty-row';
+      tr.innerHTML = `<td colspan="7">No emails to show.</td>`;
+      tbody.appendChild(tr);
+    } else {
+      visible.forEach(email => tbody.appendChild(buildRow(src, email)));
+    }
+
+    // Badge count
+    document.getElementById(`${src}-count`).textContent = `${visible.length} of ${emails.length}`;
+
+    // Update sort icons
+    document.querySelectorAll(`#${src}-section th`).forEach(th => {
+      th.classList.remove('sorted');
+      const icon = th.querySelector('.sort-icon');
+      if (!icon) return;
+      if (th.textContent.trim().toLowerCase().startsWith(sort.col)) {
+        th.classList.add('sorted');
+        icon.textContent = sort.dir === 'asc' ? '↑' : '↓';
+      } else {
+        icon.textContent = '↕';
+      }
+    });
+
+    updateFilterButtons(src);
+    updateActionSummary();
+  }
+
+  // ── Build a table row ─────────────────────────────────────────────────────
+  function buildRow(src, email) {
+    const tr = document.createElement('tr');
+    tr.id = `row-${src}-${email.id}`;
+    tr.className = getCatClass(email.category);
+
+    // Date
+    const dateStr = formatDate(email.date);
+
+    // From: split name and email if present
+    const fromMatch = email.from.match(/^(.*?)\s*<(.+?)>$/);
+    const fromName  = fromMatch ? fromMatch[1].trim() : email.from;
+    const fromEmail = fromMatch ? fromMatch[2] : '';
+
+    // Category select
+    const catOptions = ['Important', 'FYI', 'Not Important'].map(opt =>
+      `<option value="${opt}" ${email.category === opt ? 'selected' : ''}>${opt}</option>`
+    ).join('');
+
+    // Status block
+    const currentHtml = email.isFlagged
+      ? `<span class="status-current is-flagged">🚩 Flagged</span>`
+      : `<span class="status-current not-flagged">— Not flagged</span>`;
+
+    const willAction = email.category === 'Important' ? 'flag' : 'move';
+    const willHtml = willAction === 'flag'
+      ? `<span class="status-will will-flag" id="will-${src}-${email.id}">→ Flag</span>`
+      : `<span class="status-will will-move" id="will-${src}-${email.id}">→ Move to folder</span>`;
+
+    tr.innerHTML = `
+      <td class="date-cell">${dateStr}</td>
+      <td class="subject-cell">${escHtml(email.subject)}</td>
+      <td class="from-cell">
+        <div class="from-name">${escHtml(fromName)}</div>
+        ${fromEmail ? `<div class="from-email">${escHtml(fromEmail)}</div>` : ''}
+      </td>
+      <td class="summary-cell">${escHtml(email.summary)}</td>
+      <td class="action-cell">${escHtml(email.action)}</td>
+      <td>
+        <select class="cat-select ${getCatSelectClass(email.category)}"
+                onchange="onCategoryChange('${src}','${email.id}',this.value,this)">
+          ${catOptions}
+        </select>
+      </td>
+      <td class="status-cell">
+        <div class="status-block">
+          ${currentHtml}
+          ${willHtml}
+        </div>
+      </td>
+    `;
+
+    return tr;
+  }
+
+  // ── Category changed ──────────────────────────────────────────────────────
+  function onCategoryChange(src, id, newCat, selectEl) {
+    const email = state[src].emails.find(e => e.id === id);
+    if (!email) return;
+
+    email.category = newCat;
+
+    // Update row class
+    const row = document.getElementById(`row-${src}-${id}`);
+    if (row) {
+      row.className = getCatClass(newCat);
+    }
+
+    // Update select style
+    selectEl.className = `cat-select ${getCatSelectClass(newCat)}`;
+
+    // Update "Will" badge
+    const willEl = document.getElementById(`will-${src}-${id}`);
+    if (willEl) {
+      if (newCat === 'Important') {
+        willEl.textContent = '→ Flag';
+        willEl.className = 'status-will will-flag';
+      } else {
+        willEl.textContent = '→ Move to folder';
+        willEl.className = 'status-will will-move';
+      }
+    }
+
+    updateActionSummary();
+  }
+
+  // ── Sort ──────────────────────────────────────────────────────────────────
+  function setSort(src, col) {
+    const s = state[src].sort;
+    if (s.col === col) {
+      s.dir = s.dir === 'asc' ? 'desc' : 'asc';
+    } else {
+      s.col = col;
+      s.dir = col === 'date' ? 'desc' : 'asc';
+    }
+    render(src);
+  }
+
+  // ── Filter ────────────────────────────────────────────────────────────────
+  function setFilter(src, cat) {
+    state[src].filter = cat;
+    render(src);
+  }
+
+  function updateFilterButtons(src) {
+    const current = state[src].filter;
+    document.querySelectorAll(`#${src}-filters .filter-btn`).forEach(btn => {
+      btn.classList.toggle('active', btn.textContent.trim() === current);
+    });
+  }
+
+  // ── Action summary ────────────────────────────────────────────────────────
+  function updateActionSummary() {
+    const all = [...state.gmail.emails, ...state.outlook.emails];
+    const toFlag = all.filter(e => e.category === 'Important').length;
+    const toMove = all.filter(e => e.category !== 'Important').length;
+    const total  = all.length;
+    document.getElementById('action-summary').innerHTML =
+      `<span>${total}</span> emails loaded — <span>${toFlag}</span> to flag, <span>${toMove}</span> to move`;
+  }
+
+  // ── Save actions JSON ─────────────────────────────────────────────────────
+  function saveActions() {
+    const actions = [];
+
+    for (const src of ['gmail', 'outlook']) {
+      state[src].emails.forEach(e => {
+        actions.push({
+          source: src,
+          id: e.id,
+          action: e.category === 'Important' ? 'flag' : 'move'
+        });
+      });
+    }
+
+    const output = {
+      generated: new Date().toISOString(),
+      totalEmails: actions.length,
+      toFlag: actions.filter(a => a.action === 'flag').length,
+      toMove: actions.filter(a => a.action === 'move').length,
+      actions
+    };
+
+    const blob = new Blob([JSON.stringify(output, null, 2)], { type: 'application/json' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = 'email-actions.json';
+    a.click();
+    URL.revokeObjectURL(url);
+
+    showToast(`Saved — ${output.toFlag} to flag, ${output.toMove} to move`);
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  function getCatClass(cat) {
+    if (cat === 'Important')    return 'cat-important';
+    if (cat === 'FYI')          return 'cat-fyi';
+    return 'cat-notimportant';
+  }
+
+  function getCatSelectClass(cat) {
+    if (cat === 'Important')    return 'cat-important';
+    if (cat === 'FYI')          return 'cat-fyi';
+    return 'cat-notimportant';
+  }
+
+  function formatDate(iso) {
+    const d = new Date(iso);
+    const day   = String(d.getDate()).padStart(2,'0');
+    const month = d.toLocaleString('en-AU', { month: 'short' });
+    const year  = d.getFullYear();
+    const hh    = String(d.getHours()).padStart(2,'0');
+    const mm    = String(d.getMinutes()).padStart(2,'0');
+    return `${day} ${month} ${year} ${hh}:${mm}`;
+  }
+
+  function escHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3000);
+  }
+
+  // ── Init ──────────────────────────────────────────────────────────────────
+  loadEmails();
+</script>
+</body>
+</html>
