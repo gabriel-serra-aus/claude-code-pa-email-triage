@@ -10,14 +10,14 @@
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       font-size: 14px;
-      background: #f0f2f5;
-      color: #1a1a2e;
+      background: #0d1117;
+      color: #c9d1d9;
     }
 
     /* ── Header ───────────────────────────────────────────────────── */
     header {
-      background: #1a1a2e;
-      color: #fff;
+      background: #161b22;
+      color: #e6edf3;
       padding: 16px 32px;
       display: flex;
       align-items: center;
@@ -25,13 +25,14 @@
       position: sticky;
       top: 0;
       z-index: 100;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      border-bottom: 1px solid #30363d;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
     }
-    header h1 { font-size: 18px; font-weight: 600; letter-spacing: 0.3px; }
-    header .meta { font-size: 12px; color: #8899aa; margin-top: 2px; }
+    header h1 { font-size: 18px; font-weight: 600; letter-spacing: 0.3px; color: #e6edf3; }
+    header .meta { font-size: 12px; color: #6e7681; margin-top: 2px; }
 
     .btn-save {
-      background: #4f8ef7;
+      background: #1f6feb;
       color: #fff;
       border: none;
       border-radius: 6px;
@@ -41,28 +42,30 @@
       cursor: pointer;
       transition: background 0.15s;
     }
-    .btn-save:hover { background: #3a78e8; }
-    .btn-save:disabled { background: #556; cursor: not-allowed; opacity: 0.6; }
+    .btn-save:hover { background: #388bfd; }
+    .btn-save:disabled { background: #30363d; cursor: not-allowed; opacity: 0.6; }
 
     /* ── Load error banner ───────────────────────────────────────── */
     #load-error {
       display: none;
-      background: #fff3cd;
-      border-left: 4px solid #f0ad4e;
+      background: #2d1b00;
+      border-left: 4px solid #d29922;
       padding: 14px 32px;
       font-size: 13px;
       line-height: 1.6;
+      color: #e3b341;
     }
-    #load-error strong { display: block; margin-bottom: 4px; }
-    #load-error code { background: #f8f8f8; padding: 1px 5px; border-radius: 3px; font-size: 12px; }
+    #load-error strong { display: block; margin-bottom: 4px; color: #f0c040; }
+    #load-error code { background: #161b22; padding: 1px 5px; border-radius: 3px; font-size: 12px; color: #79c0ff; }
 
     /* ── Toast notification ──────────────────────────────────────── */
     #toast {
       position: fixed;
       bottom: 28px;
       right: 28px;
-      background: #1a1a2e;
-      color: #fff;
+      background: #21262d;
+      color: #e6edf3;
+      border: 1px solid #30363d;
       padding: 12px 20px;
       border-radius: 8px;
       font-size: 13px;
@@ -79,16 +82,17 @@
 
     /* ── Section ─────────────────────────────────────────────────── */
     .section {
-      background: #fff;
+      background: #161b22;
+      border: 1px solid #30363d;
       border-radius: 10px;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
       margin-bottom: 32px;
       overflow: hidden;
     }
 
     .section-header {
       padding: 16px 20px 14px;
-      border-bottom: 1px solid #eef0f3;
+      border-bottom: 1px solid #30363d;
       display: flex;
       align-items: center;
       gap: 16px;
@@ -98,28 +102,30 @@
     .section-title {
       font-size: 15px;
       font-weight: 700;
+      color: #e6edf3;
       display: flex;
       align-items: center;
       gap: 8px;
     }
-    .section-title .account { font-size: 11px; font-weight: 400; color: #778; }
+    .section-title .account { font-size: 11px; font-weight: 400; color: #6e7681; }
 
     .badge-count {
       font-size: 11px;
       font-weight: 600;
       padding: 2px 8px;
       border-radius: 20px;
-      background: #e8ecf5;
-      color: #445;
+      background: #21262d;
+      color: #8b949e;
+      border: 1px solid #30363d;
     }
 
     /* ── Filter bar ──────────────────────────────────────────────── */
     .filters { display: flex; gap: 6px; margin-left: auto; }
 
     .filter-btn {
-      border: 1px solid #dde1ea;
-      background: #fff;
-      color: #556;
+      border: 1px solid #30363d;
+      background: #21262d;
+      color: #8b949e;
       border-radius: 20px;
       padding: 4px 13px;
       font-size: 12px;
@@ -127,11 +133,11 @@
       cursor: pointer;
       transition: all 0.12s;
     }
-    .filter-btn:hover { background: #f0f2f8; }
-    .filter-btn.active { background: #1a1a2e; color: #fff; border-color: #1a1a2e; }
-    .filter-btn.f-important.active { background: #c62828; border-color: #c62828; }
-    .filter-btn.f-fyi.active { background: #1565c0; border-color: #1565c0; }
-    .filter-btn.f-notimportant.active { background: #555; border-color: #555; }
+    .filter-btn:hover { background: #30363d; color: #c9d1d9; }
+    .filter-btn.active { background: #388bfd; color: #fff; border-color: #388bfd; }
+    .filter-btn.f-important.active { background: #da3633; border-color: #da3633; color: #fff; }
+    .filter-btn.f-fyi.active { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+    .filter-btn.f-notimportant.active { background: #484f58; border-color: #484f58; color: #fff; }
 
     /* ── Table ───────────────────────────────────────────────────── */
     .table-wrap { overflow-x: auto; }
@@ -142,8 +148,8 @@
     }
 
     thead tr {
-      background: #f7f8fa;
-      border-bottom: 2px solid #eef0f3;
+      background: #0d1117;
+      border-bottom: 2px solid #30363d;
     }
 
     th {
@@ -153,58 +159,60 @@
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.5px;
-      color: #778;
+      color: #6e7681;
       white-space: nowrap;
     }
     th.sortable { cursor: pointer; user-select: none; }
-    th.sortable:hover { color: #334; }
+    th.sortable:hover { color: #c9d1d9; }
     th .sort-icon { margin-left: 4px; opacity: 0.4; }
-    th.sorted .sort-icon { opacity: 1; color: #4f8ef7; }
+    th.sorted .sort-icon { opacity: 1; color: #388bfd; }
 
     tbody tr {
-      border-bottom: 1px solid #f0f2f5;
-      transition: background 0.1s;
+      border-bottom: 1px solid #21262d;
+      transition: filter 0.1s;
     }
     tbody tr:last-child { border-bottom: none; }
-    tbody tr:hover { filter: brightness(0.97); }
+    tbody tr:hover { filter: brightness(1.08); }
 
-    /* Row colours by category */
-    tr.cat-important  { background: #fce4ec; }
-    tr.cat-fyi        { background: #e3f2fd; }
-    tr.cat-notimportant { background: #f5f5f5; }
+    /* Row colours by category — muted for dark theme */
+    tr.cat-important    { background: #2d1b1e; }
+    tr.cat-fyi          { background: #131c2e; }
+    tr.cat-notimportant { background: #161b22; }
 
     td {
       padding: 10px 12px;
       vertical-align: top;
       font-size: 13px;
+      color: #c9d1d9;
     }
 
-    td.date-cell { white-space: nowrap; color: #556; font-size: 12px; }
+    td.date-cell { white-space: nowrap; color: #6e7681; font-size: 12px; }
 
-    td.subject-cell { font-weight: 500; min-width: 200px; }
+    td.subject-cell { font-weight: 500; min-width: 200px; color: #e6edf3; }
 
-    td.from-cell { color: #334; min-width: 160px; }
-    .from-name { font-weight: 500; }
-    .from-email { font-size: 11px; color: #778; }
+    td.from-cell { min-width: 160px; }
+    .from-name { font-weight: 500; color: #c9d1d9; }
+    .from-email { font-size: 11px; color: #6e7681; }
 
-    td.summary-cell { color: #445; min-width: 220px; line-height: 1.5; }
+    td.summary-cell { color: #8b949e; min-width: 220px; line-height: 1.5; }
 
-    td.action-cell { color: #556; font-style: italic; min-width: 160px; font-size: 12px; }
+    td.action-cell { color: #6e7681; font-style: italic; min-width: 160px; font-size: 12px; }
 
     /* ── Category dropdown ───────────────────────────────────────── */
     .cat-select {
-      border: 1px solid #dde1ea;
+      border: 1px solid #30363d;
       border-radius: 5px;
       padding: 4px 8px;
       font-size: 12px;
       font-weight: 600;
       cursor: pointer;
-      background: #fff;
+      background: #21262d;
+      color: #c9d1d9;
       min-width: 120px;
     }
-    .cat-select.cat-important  { border-color: #e57373; color: #c62828; background: #fff8f8; }
-    .cat-select.cat-fyi        { border-color: #64b5f6; color: #1565c0; background: #f0f8ff; }
-    .cat-select.cat-notimportant { border-color: #bbb; color: #555; background: #fafafa; }
+    .cat-select.cat-important    { border-color: #f85149; color: #f85149; background: #2d1b1e; }
+    .cat-select.cat-fyi          { border-color: #388bfd; color: #79c0ff; background: #131c2e; }
+    .cat-select.cat-notimportant { border-color: #484f58; color: #8b949e; background: #1c2128; }
 
     /* ── Status cell ─────────────────────────────────────────────── */
     td.status-cell { min-width: 140px; }
@@ -219,8 +227,8 @@
       border-radius: 10px;
       margin-bottom: 5px;
     }
-    .status-current.is-flagged  { background: #fff3e0; color: #e65100; border: 1px solid #ffcc80; }
-    .status-current.not-flagged { background: #f5f5f5; color: #888; border: 1px solid #ddd; }
+    .status-current.is-flagged  { background: #2d1e00; color: #f0883e; border: 1px solid #6e3a00; }
+    .status-current.not-flagged { background: #21262d; color: #6e7681; border: 1px solid #30363d; }
 
     .status-will {
       display: inline-flex;
@@ -231,8 +239,8 @@
       padding: 2px 8px;
       border-radius: 10px;
     }
-    .status-will.will-flag { background: #fce4ec; color: #c62828; border: 1px solid #ef9a9a; }
-    .status-will.will-move { background: #e3f2fd; color: #1565c0; border: 1px solid #90caf9; }
+    .status-will.will-flag { background: #2d1b1e; color: #f85149; border: 1px solid #6e1b18; }
+    .status-will.will-move { background: #131c2e; color: #79c0ff; border: 1px solid #1f3a6e; }
 
     .status-block { display: flex; flex-direction: column; gap: 4px; }
 
@@ -240,24 +248,24 @@
     .empty-row td {
       text-align: center;
       padding: 32px;
-      color: #aaa;
+      color: #484f58;
       font-style: italic;
     }
 
     /* ── Bottom save bar ─────────────────────────────────────────── */
     .save-bar {
-      background: #fff;
-      border-top: 1px solid #eef0f3;
+      background: #161b22;
+      border-top: 1px solid #30363d;
       padding: 16px 32px;
       display: flex;
       align-items: center;
       justify-content: space-between;
       position: sticky;
       bottom: 0;
-      box-shadow: 0 -2px 8px rgba(0,0,0,0.06);
+      box-shadow: 0 -2px 8px rgba(0,0,0,0.3);
     }
-    .save-bar .summary { font-size: 13px; color: #556; }
-    .save-bar .summary span { font-weight: 700; color: #1a1a2e; }
+    .save-bar .summary { font-size: 13px; color: #6e7681; }
+    .save-bar .summary span { font-weight: 700; color: #e6edf3; }
   </style>
 </head>
 <body>
@@ -272,8 +280,8 @@
 
 <div id="load-error">
   <strong>Could not load email JSON files automatically.</strong>
-  This page must be served via a local server to load JSON files.<br>
-  Run <code>python -m http.server 8080</code> in the project root, then open
+  This page must be served via the local server to load JSON files.<br>
+  Run <code>node server.js</code> in the project root, then open
   <code>http://localhost:8080/email-triage.html</code>
 </div>
 
@@ -556,37 +564,38 @@
       `<span>${total}</span> emails loaded — <span>${toFlag}</span> to flag, <span>${toMove}</span> to move`;
   }
 
-  // ── Save actions JSON ─────────────────────────────────────────────────────
-  function saveActions() {
+  // ── Build actions payload ─────────────────────────────────────────────────
+  function buildOutput() {
     const actions = [];
-
     for (const src of ['gmail', 'outlook']) {
       state[src].emails.forEach(e => {
-        actions.push({
-          source: src,
-          id: e.id,
-          action: e.category === 'Important' ? 'flag' : 'move'
-        });
+        actions.push({ source: src, id: e.id, action: e.category === 'Important' ? 'flag' : 'move' });
       });
     }
-
-    const output = {
-      generated: new Date().toISOString(),
+    return {
+      generated:   new Date().toISOString(),
       totalEmails: actions.length,
-      toFlag: actions.filter(a => a.action === 'flag').length,
-      toMove: actions.filter(a => a.action === 'move').length,
+      toFlag:      actions.filter(a => a.action === 'flag').length,
+      toMove:      actions.filter(a => a.action === 'move').length,
       actions
     };
+  }
 
-    const blob = new Blob([JSON.stringify(output, null, 2)], { type: 'application/json' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href     = url;
-    a.download = 'email-actions.json';
-    a.click();
-    URL.revokeObjectURL(url);
-
-    showToast(`Saved — ${output.toFlag} to flag, ${output.toMove} to move`);
+  // ── Save actions into this HTML file via local server ─────────────────────
+  async function saveActions() {
+    const output = buildOutput();
+    try {
+      const res = await fetch('/save-actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(output)
+      });
+      if (!res.ok) throw new Error(`Server returned ${res.status}`);
+      showToast(`Saved — ${output.toFlag} to flag, ${output.toMove} to move`);
+    } catch (err) {
+      showToast('Save failed — is server.js running? (node server.js)');
+      console.error(err);
+    }
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
@@ -629,6 +638,61 @@
 
   // ── Init ──────────────────────────────────────────────────────────────────
   loadEmails();
+</script>
+<script type="application/json" id="email-actions">
+{
+  "generated": "2026-03-28T07:48:29.078Z",
+  "totalEmails": 9,
+  "toFlag": 4,
+  "toMove": 5,
+  "actions": [
+    {
+      "source": "gmail",
+      "id": "gmail-001",
+      "action": "flag"
+    },
+    {
+      "source": "gmail",
+      "id": "gmail-002",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "gmail-003",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "gmail-004",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "gmail-005",
+      "action": "flag"
+    },
+    {
+      "source": "outlook",
+      "id": "outlook-001",
+      "action": "flag"
+    },
+    {
+      "source": "outlook",
+      "id": "outlook-002",
+      "action": "move"
+    },
+    {
+      "source": "outlook",
+      "id": "outlook-003",
+      "action": "move"
+    },
+    {
+      "source": "outlook",
+      "id": "outlook-004",
+      "action": "flag"
+    }
+  ]
+}
 </script>
 </body>
 </html>
