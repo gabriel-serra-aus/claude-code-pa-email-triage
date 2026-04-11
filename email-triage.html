@@ -566,19 +566,29 @@
 
   // ── Build actions payload ─────────────────────────────────────────────────
   function buildOutput() {
-    const actions = [];
+    const generated = new Date().toISOString();
+    const result = {};
     for (const src of ['gmail', 'outlook']) {
-      state[src].emails.forEach(e => {
-        actions.push({ source: src, id: e.id, action: e.category === 'Important' ? 'flag' : 'move' });
-      });
+      const actions = state[src].emails.map(e => ({
+        id:       e.id,
+        date:     e.date,
+        from:     e.from,
+        subject:  e.subject,
+        summary:  e.summary,
+        action:   e.action,
+        category: e.category,
+        triage:   e.category === 'Important' ? 'important' : e.category === 'FYI' ? 'do-nothing' : 'archive'
+      }));
+      result[src] = {
+        generated,
+        total:       actions.length,
+        important:   actions.filter(a => a.triage === 'important').length,
+        doNothing:   actions.filter(a => a.triage === 'do-nothing').length,
+        archive:     actions.filter(a => a.triage === 'archive').length,
+        actions
+      };
     }
-    return {
-      generated:   new Date().toISOString(),
-      totalEmails: actions.length,
-      toFlag:      actions.filter(a => a.action === 'flag').length,
-      toMove:      actions.filter(a => a.action === 'move').length,
-      actions
-    };
+    return result;
   }
 
   // ── Save actions into this HTML file via local server ─────────────────────
@@ -591,7 +601,10 @@
         body: JSON.stringify(output)
       });
       if (!res.ok) throw new Error(`Server returned ${res.status}`);
-      showToast(`Saved — ${output.toFlag} to flag, ${output.toMove} to move`);
+      const important = output.gmail.important + output.outlook.important;
+      const archive   = output.gmail.archive   + output.outlook.archive;
+      const doNothing = output.gmail.doNothing + output.outlook.doNothing;
+      showToast(`Saved — ${important} important, ${doNothing} FYI, ${archive} archive`);
     } catch (err) {
       showToast('Save failed — is server.js running? (node server.js)');
       console.error(err);
@@ -641,55 +654,510 @@
 </script>
 <script type="application/json" id="email-actions">
 {
-  "generated": "2026-03-28T07:48:29.078Z",
-  "totalEmails": 9,
-  "toFlag": 4,
-  "toMove": 5,
+  "generated": "2026-04-10T23:04:35.925Z",
+  "totalEmails": 100,
+  "toFlag": 10,
+  "toMove": 90,
   "actions": [
     {
       "source": "gmail",
-      "id": "gmail-001",
-      "action": "flag"
-    },
-    {
-      "source": "gmail",
-      "id": "gmail-002",
+      "id": "19d77d02180b34fc",
       "action": "move"
     },
     {
       "source": "gmail",
-      "id": "gmail-003",
+      "id": "19d75e2c3fc29af5",
       "action": "move"
     },
     {
       "source": "gmail",
-      "id": "gmail-004",
+      "id": "19d7587d0ac73538",
       "action": "move"
     },
     {
       "source": "gmail",
-      "id": "gmail-005",
+      "id": "19d757d727411056",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d750d4d018ea55",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d71a2bcd13cfbd",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d7075382a75953",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d6b1e571a438a7",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d69f70ac65f37a",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d6803adbb5980c",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d608802be0864a",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d5b3bf7aea668a",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d56b3ba2243b1e",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d564c315e1890a",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d56134051bd144",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d56126fe0d00ef",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d514f26163de80",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d5133f51e0ad68",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d4e50235ad5a54",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d4c195b8e8d73a",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d47075adca83b6",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d446dc9901f6a4",
+      "action": "flag"
+    },
+    {
+      "source": "gmail",
+      "id": "19d4239b554048b0",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d3cf3ea47d4e7b",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d3c59cbc95efed",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d3720c490e111b",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d320679cf6766e",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d2d80d25789f01",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d2d320eb98f549",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d2d19106b2df1e",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d2b04abbbf9117",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d27edc1d39b5bf",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d23cbf819bbace",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d233413d85784c",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d22f93c459124a",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d20dfbc34b15e4",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d19801cf8c51b3",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d1932ca1419b6e",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d186018bc1651f",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d135d94f5eed45",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d10e9bd0e1c06b",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d0e05143a7038e",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d09356d7d1e6e4",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d0925d0e1fc10c",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d0902f3fef07c3",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d08f41599733e1",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d08d8ba025dd9f",
+      "action": "flag"
+    },
+    {
+      "source": "gmail",
+      "id": "19d08d46f8bb15ea",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d08cd22287ba17",
+      "action": "move"
+    },
+    {
+      "source": "gmail",
+      "id": "19d069a1aa240bcd",
       "action": "flag"
     },
     {
       "source": "outlook",
-      "id": "outlook-001",
-      "action": "flag"
-    },
-    {
-      "source": "outlook",
-      "id": "outlook-002",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm53AAAA",
       "action": "move"
     },
     {
       "source": "outlook",
-      "id": "outlook-003",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm52AAAA",
       "action": "move"
     },
     {
       "source": "outlook",
-      "id": "outlook-004",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm51AAAA",
+      "action": "move"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm50AAAA",
+      "action": "move"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm5zAAAA",
+      "action": "move"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm5yAAAA",
       "action": "flag"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm5xAAAA",
+      "action": "move"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm5wAAAA",
+      "action": "flag"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm5vAAAA",
+      "action": "move"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm5uAAAAAA==",
+      "action": "flag"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm5tAAAA",
+      "action": "move"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm5sAAAA",
+      "action": "flag"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm5rAAAA",
+      "action": "move"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm5qAAAA",
+      "action": "move"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm5pAAAA",
+      "action": "move"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm5oAAAA",
+      "action": "move"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm5nAAAA",
+      "action": "move"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm5mAAAA",
+      "action": "move"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm5lAAAA",
+      "action": "move"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm5kAAAA",
+      "action": "flag"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm5jAAAA",
+      "action": "move"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm5iAAAA",
+      "action": "move"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm5hAAAA",
+      "action": "move"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm5gAAAA",
+      "action": "move"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm5fAAAA",
+      "action": "move"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm5eAAAA",
+      "action": "move"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm5dAAAA",
+      "action": "move"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm5cAAAA",
+      "action": "move"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm5bAAAA",
+      "action": "move"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm5aAAAA",
+      "action": "move"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm5ZAAAA",
+      "action": "move"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm5YAAAA",
+      "action": "move"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm5XAAAA",
+      "action": "move"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm5WAAAA",
+      "action": "move"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm5VAAAA",
+      "action": "move"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm5UAAAA",
+      "action": "move"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm5TAAAA",
+      "action": "move"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm5SAAAA",
+      "action": "move"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm5RAAAA",
+      "action": "flag"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm5QAAAA",
+      "action": "move"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm5PAAAA",
+      "action": "flag"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm5OAAAA",
+      "action": "move"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm5MAAAA",
+      "action": "move"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm5LAAAA",
+      "action": "move"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm5KAAAA",
+      "action": "move"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjYvm5JAAAA",
+      "action": "move"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjX8T9gAAAA",
+      "action": "move"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjX8T9fAAAA",
+      "action": "move"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjX8T9eAAAA",
+      "action": "move"
+    },
+    {
+      "source": "outlook",
+      "id": "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAEYAAAMTLzebykNBSKW_OFt1Mr34BwC7ZHyNGkSZR67cK0BhujWDAAACAQwAAAC7ZHyNGkSZR67cK0BhujWDAAjX8T9cAAAA",
+      "action": "move"
     }
   ]
 }

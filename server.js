@@ -12,9 +12,8 @@ const path = require("path");
 
 const PORT    = 8080;
 const ROOT    = __dirname;
-const HTML    = path.join(ROOT, "email-triage.html");
-
-const EMAIL_SOURCE = "C:\\Users\\gabri\\Documents\\Claude\\Workspace\\Personal Assistance\\email-source";
+const EMAIL_SOURCE  = "C:\\Users\\gabri\\Documents\\Claude\\Workspace\\Personal Assistance\\email-source";
+const EMAIL_TRIAGE  = "C:\\Users\\gabri\\Documents\\Claude\\Workspace\\Personal Assistance\\email-triage";
 
 const MIME = {
   ".html": "text/html",
@@ -43,21 +42,11 @@ const server = http.createServer((req, res) => {
     req.on("data", chunk => (body += chunk));
     req.on("end", () => {
       try {
-        const payload  = JSON.parse(body);
-        let   html     = fs.readFileSync(HTML, "utf8");
-        const jsonStr  = JSON.stringify(payload, null, 2);
-        const newTag   = `<script type="application/json" id="email-actions">\n${jsonStr}\n</script>`;
-
-        if (html.includes('id="email-actions"')) {
-          html = html.replace(
-            /<script type="application\/json" id="email-actions">[\s\S]*?<\/script>/,
-            newTag
-          );
-        } else {
-          html = html.replace("</body>", newTag + "\n</body>");
+        const payload = JSON.parse(body);
+        for (const src of ["gmail", "outlook"]) {
+          const outPath = path.join(EMAIL_TRIAGE, `${src}-actions.json`);
+          fs.writeFileSync(outPath, JSON.stringify(payload[src], null, 2), "utf8");
         }
-
-        fs.writeFileSync(HTML, html, "utf8");
         send(res, 200, { ok: true });
       } catch (err) {
         send(res, 500, { ok: false, error: err.message });
