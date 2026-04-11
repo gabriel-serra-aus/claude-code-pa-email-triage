@@ -34,11 +34,20 @@ Write JSON source files        (no file dialog)
 
 ```
 pa-email-triage/
-├── email-triage.html          # The app — open in browser via local server
-├── server.js                  # Local Node.js server (serves app + handles saves)
+├── app/                       # Next.js App Router directory
+│   ├── layout.js              # Root layout (wraps all pages, imports global CSS)
+│   ├── page.js                # Home page (renders the EmailTriage component)
+│   ├── globals.css            # All styles
+│   └── api/
+│       ├── emails/route.js    # GET /api/emails — reads email JSON files
+│       └── save-actions/route.js  # POST /api/save-actions — writes triage decisions
+├── components/
+│   └── EmailTriage.js         # Main interactive component (client-side React)
 ├── email-source/
 │   ├── gmail-emails.json      # Populated by Skill 1
 │   └── outlook-emails.json    # Populated by Skill 1
+├── next.config.mjs            # Next.js configuration
+├── package.json               # Dependencies (next, react, react-dom)
 └── README.md
 ```
 
@@ -46,13 +55,14 @@ pa-email-triage/
 
 ## Setup & usage
 
-### 1. Start the server
+### 1. Start the dev server
 
 ```bash
-node server.js
+npm install   # first time only
+npm run dev
 ```
 
-Then open: [http://localhost:8080/email-triage.html](http://localhost:8080/email-triage.html)
+Then open: [http://localhost:3000](http://localhost:3000)
 
 ### 2. Populate email data (Skill 1)
 
@@ -76,12 +86,12 @@ Reload the browser page after running Skill 1.
 
 ### 4. Save actions
 
-Click **Save Flag & Archive Script**. The app POSTs to the local server, which writes the actions directly into `email-triage.html` inside a `<script id="email-actions">` tag — no file dialog, no separate output file.
+Click **Save Flag & Archive Script**. The app POSTs to the Next.js API route, which writes the actions as JSON files to the workspace folder.
 
 ### 5. Execute actions (Skill 2)
 
 Run **Skill 2** in Claude Code. It will:
-- Read `email-triage.html` and extract the `<script id="email-actions">` block
+- Read the action JSON files from the workspace folder
 - For each `flag` action → star/flag the email via the MCP connector
 - For each `move` action → move the email out of Inbox via the MCP connector
 
