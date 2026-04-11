@@ -83,6 +83,12 @@ export default function EmailTriage() {
   // Controls the "action required" modal that appears after saving.
   const [showModal, setShowModal] = useState(false);
 
+  // Loading state for the "Update Emails" button.
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  // Results from the execute-actions API (shown in a results modal).
+  const [updateResults, setUpdateResults] = useState(null);
+
   // ── Toast helper ───────────────────────────────────────────────────────────
   // Show a toast message for 3 seconds, then hide it.
   const showToast = useCallback((msg) => {
@@ -224,6 +230,38 @@ export default function EmailTriage() {
     }
   }
 
+  // ── Save + execute actions (the "Update Emails" flow) ─────────────────────
+  async function updateEmails() {
+    setIsUpdating(true);
+    const output = buildOutput();
+
+    try {
+      // Step 1: save the action files (same as the Save button)
+      const saveRes = await fetch("/api/save-actions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(output),
+      });
+      if (!saveRes.ok) throw new Error("Save failed");
+
+      // Step 2: execute the actions against Gmail & Outlook
+      const execRes = await fetch("/api/execute-actions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(output),
+      });
+      if (!execRes.ok) throw new Error("Execute failed");
+
+      const results = await execRes.json();
+      setUpdateResults(results);
+    } catch (err) {
+      showToast("Update failed — " + err.message);
+      console.error(err);
+    } finally {
+      setIsUpdating(false);
+    }
+  }
+
   // ── Compute action summary counts ─────────────────────────────────────────
   const allEmails = [...emails.gmail, ...emails.outlook];
   const toFlag = allEmails.filter((e) => e.category === "Important").length;
@@ -270,9 +308,18 @@ export default function EmailTriage() {
           <h1>Email Triage</h1>
           <div className="meta">{lastLoaded || "No data loaded"}</div>
         </div>
-        <button className="btn-save" onClick={saveActions}>
-          Save Flag &amp; Archive Script
-        </button>
+        <div className="header-buttons">
+          <button className="btn-save" onClick={saveActions}>
+            Save Flag &amp; Archive Script
+          </button>
+          <button
+            className="btn-save btn-update"
+            onClick={updateEmails}
+            disabled={isUpdating || total === 0}
+          >
+            {isUpdating ? "Updating…" : "Update Emails"}
+          </button>
+        </div>
       </header>
 
       {/* ── Error banner (only shows if loading failed) ────────────── */}
@@ -333,18 +380,27 @@ export default function EmailTriage() {
           <span>{total}</span> emails loaded — <span>{toFlag}</span> to flag,{" "}
           <span>{toMove}</span> to move
         </div>
-        <button className="btn-save" onClick={saveActions}>
-          Save Flag &amp; Archive Script
-        </button>
+        <div className="header-buttons">
+          <button className="btn-save" onClick={saveActions}>
+            Save Flag &amp; Archive Script
+          </button>
+          <button
+            className="btn-save btn-update"
+            onClick={updateEmails}
+            disabled={isUpdating || total === 0}
+          >
+            {isUpdating ? "Updating…" : "Update Emails"}
+          </button>
+        </div>
       </div>
 
       {/* ── Toast notification ─────────────────────────────────────── */}
       <div className={`toast ${toast ? "show" : ""}`}>{toast}</div>
 
       {/* ── Modal — appears after saving to remind user to action ── */}
+      {/* ── Modal — appears after saving (Save button only) ────── */}
       {showModal && (
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
-          {/* stopPropagation prevents clicking inside the modal from closing it */}
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <h2>Actions saved successfully</h2>
             <p>
@@ -356,6 +412,66 @@ export default function EmailTriage() {
               <span>from the Personal Assistance project</span>
             </div>
             <button className="btn-save modal-ok" onClick={() => setShowModal(false)}>
+              OK
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Results modal — appears after Update Emails completes ── */}
+      {updateResults && (
+        <div className="modal-overlay" onClick={() => setUpdateResults(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>
+              {updateResults.gmail.failed + updateResults.outlook.failed === 0
+                ? "Emails updated successfully"
+                : "Emails updated with errors"}
+            </h2>
+            <div className="results-summary">
+              <div className="result-provider">
+                <div className="result-provider-title">Gmail</div>
+                <div className="result-stats">
+                  {updateResults.gmail.archived > 0 && (
+                    <span className="result-stat">{updateResults.gmail.archived} archived</span>
+                  )}
+                  {updateResults.gmail.starred > 0 && (
+                    <span className="result-stat">{updateResults.gmail.starred} starred</span>
+                  )}
+                  {updateResults.gmail.skipped > 0 && (
+                    <span className="result-stat stat-muted">{updateResults.gmail.skipped} skipped</span>
+                  )}
+                  {updateResults.gmail.failed > 0 && (
+                    <span className="result-stat stat-error">{updateResults.gmail.failed} failed</span>
+                  )}
+                </div>
+              </div>
+              <div className="result-provider">
+                <div className="result-provider-title">Outlook</div>
+                <div className="result-stats">
+                  {updateResults.outlook.archived > 0 && (
+                    <span className="result-stat">{updateResults.outlook.archived} archived</span>
+                  )}
+                  {updateResults.outlook.flagged > 0 && (
+                    <span className="result-stat">{updateResults.outlook.flagged} flagged</span>
+                  )}
+                  {updateResults.outlook.skipped > 0 && (
+                    <span className="result-stat stat-muted">{updateResults.outlook.skipped} skipped</span>
+                  )}
+                  {updateResults.outlook.failed > 0 && (
+                    <span className="result-stat stat-error">{updateResults.outlook.failed} failed</span>
+                  )}
+                </div>
+              </div>
+            </div>
+            {/* Show error details if any */}
+            {(updateResults.gmail.errors.length > 0 || updateResults.outlook.errors.length > 0) && (
+              <div className="result-errors">
+                {[...updateResults.gmail.errors, ...updateResults.outlook.errors].map((e, i) => (
+                  <div key={i} className="error-item">{e}</div>
+                ))}
+              </div>
+            )}
+            <button className="btn-save modal-ok" onClick={() => setUpdateResults(null)}>
               OK
             </button>
           </div>
