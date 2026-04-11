@@ -12,7 +12,7 @@
  * workspace folder and returns them together as one JSON response.
  */
 
-import { readFile } from "fs/promises";
+import { readFile, stat } from "fs/promises";
 import path from "path";
 
 // The external folder where Skill 1 writes the email JSON files.
@@ -34,9 +34,14 @@ export async function GET() {
     try {
       const raw = await readFile(filePath, "utf8");
       result[src] = JSON.parse(raw);
+
+      // Get the file's last-modified timestamp so the UI can warn if data is stale
+      const fileInfo = await stat(filePath);
+      result[`${src}Modified`] = fileInfo.mtime.toISOString();
     } catch {
       // If the file doesn't exist yet (Skill 1 hasn't run), return an empty array
       result[src] = [];
+      result[`${src}Modified`] = null;
     }
   }
 

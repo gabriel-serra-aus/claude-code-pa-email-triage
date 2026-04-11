@@ -23,13 +23,6 @@ function getCatClass(cat) {
   return "cat-notimportant";
 }
 
-/** Return the CSS class for the category <select> dropdown */
-function getCatSelectClass(cat) {
-  if (cat === "Important") return "cat-important";
-  if (cat === "FYI") return "cat-fyi";
-  return "cat-notimportant";
-}
-
 /** Format an ISO date string into a readable "DD Mon YYYY HH:MM" format */
 function formatDate(iso) {
   const d = new Date(iso);
@@ -84,6 +77,12 @@ export default function EmailTriage() {
   // Whether there was an error loading the email data.
   const [loadError, setLoadError] = useState(false);
 
+  // Stores when each source file was last modified (ISO string from the server).
+  const [fileModified, setFileModified] = useState({ gmail: null, outlook: null });
+
+  // Controls the "action required" modal that appears after saving.
+  const [showModal, setShowModal] = useState(false);
+
   // ── Toast helper ───────────────────────────────────────────────────────────
   // Show a toast message for 3 seconds, then hide it.
   const showToast = useCallback((msg) => {
@@ -108,6 +107,12 @@ export default function EmailTriage() {
         setEmails({
           gmail: data.gmail || [],
           outlook: data.outlook || [],
+        });
+
+        // Store file modification timestamps so we can warn if data is stale
+        setFileModified({
+          gmail: data.gmailModified || null,
+          outlook: data.outlookModified || null,
         });
 
         // Record when we loaded the data
@@ -211,12 +216,8 @@ export default function EmailTriage() {
       });
       if (!res.ok) throw new Error(`Server returned ${res.status}`);
 
-      const important = output.gmail.important + output.outlook.important;
-      const archive = output.gmail.archive + output.outlook.archive;
-      const doNothing = output.gmail.doNothing + output.outlook.doNothing;
-      showToast(
-        `Saved — ${important} important, ${doNothing} FYI, ${archive} archive`
-      );
+      // Show the modal reminding the user to run the action skill
+      setShowModal(true);
     } catch (err) {
       showToast("Save failed — check the console for details");
       console.error(err);
@@ -228,6 +229,30 @@ export default function EmailTriage() {
   const toFlag = allEmails.filter((e) => e.category === "Important").length;
   const toMove = allEmails.filter((e) => e.category !== "Important").length;
   const total = allEmails.length;
+
+  // ── Check if source files are stale (older than 24 hours) ────────────────
+  // We compare each file's modification time against "now". If either file
+  // was modified more than a day ago, we show a red warning banner.
+  const now = Date.now();
+  const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+  // Find the most recent modification time across both files
+  const modifiedTimes = [fileModified.gmail, fileModified.outlook]
+    .filter(Boolean)
+    .map((iso) => new Date(iso).getTime());
+  const latestModified = modifiedTimes.length > 0 ? Math.max(...modifiedTimes) : null;
+  const isStale = latestModified !== null && now - latestModified > ONE_DAY_MS;
+
+  /** Format a modification timestamp into a human-readable relative string */
+  function formatAge(isoString) {
+    if (!isoString) return "unknown";
+    const ageMs = now - new Date(isoString).getTime();
+    const hours = Math.floor(ageMs / (1000 * 60 * 60));
+    const days = Math.floor(hours / 24);
+    if (days > 0) return `${days} day${days > 1 ? "s" : ""} ago`;
+    if (hours > 0) return `${hours} hour${hours > 1 ? "s" : ""} ago`;
+    return "just now";
+  }
 
   // ── Render ────────────────────────────────────────────────────────────────
   //
@@ -255,6 +280,24 @@ export default function EmailTriage() {
         <div className="load-error">
           <strong>Could not load email data.</strong>
           Make sure the email source JSON files exist in the workspace folder.
+        </div>
+      )}
+
+      {/* ── Stale data warning (source files older than 24 hours) ─── */}
+      {isStale && (
+        <div className="stale-warning">
+          <strong>Source files are outdated!</strong>
+          Gmail data: {formatAge(fileModified.gmail)} — Outlook data: {formatAge(fileModified.outlook)}.
+          <br />
+          Refresh by running <code>/pa-fetch-emails</code> from the
+          Personal Assistance project in Co Work.
+        </div>
+      )}
+
+      {/* ── Source file info (shows when data is fresh) ─────────────── */}
+      {!isStale && latestModified && (
+        <div className="source-info">
+          Source files updated: Gmail {formatAge(fileModified.gmail)} — Outlook {formatAge(fileModified.outlook)}
         </div>
       )}
 
@@ -297,6 +340,27 @@ export default function EmailTriage() {
 
       {/* ── Toast notification ─────────────────────────────────────── */}
       <div className={`toast ${toast ? "show" : ""}`}>{toast}</div>
+
+      {/* ── Modal — appears after saving to remind user to action ── */}
+      {showModal && (
+        <div className="modal-overlay" onClick={() => setShowModal(false)}>
+          {/* stopPropagation prevents clicking inside the modal from closing it */}
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Actions saved successfully</h2>
+            <p>
+              To execute the flag &amp; archive actions on your emails,
+              run the following skill in Co Work:
+            </p>
+            <div className="modal-command">
+              <code>/pa-action-emails</code>
+              <span>from the Personal Assistance project</span>
+            </div>
+            <button className="btn-save modal-ok" onClick={() => setShowModal(false)}>
+              OK
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -455,17 +519,19 @@ function EmailRow({ src, email, onCategoryChange }) {
       {/* Suggested action */}
       <td className="action-cell">{email.action}</td>
 
-      {/* Category dropdown */}
+      {/* Category buttons — one click to switch category */}
       <td>
-        <select
-          className={`cat-select ${getCatSelectClass(email.category)}`}
-          value={email.category}
-          onChange={(e) => onCategoryChange(src, email.id, e.target.value)}
-        >
-          <option value="Important">Important</option>
-          <option value="FYI">FYI</option>
-          <option value="Not Important">Not Important</option>
-        </select>
+        <div className="cat-buttons">
+          {["Important", "FYI", "Not Important"].map((cat) => (
+            <button
+              key={cat}
+              className={`cat-btn cat-btn-${getCatClass(cat)} ${email.category === cat ? "active" : ""}`}
+              onClick={() => onCategoryChange(src, email.id, cat)}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
       </td>
 
       {/* Status — current flag state + what will happen */}
