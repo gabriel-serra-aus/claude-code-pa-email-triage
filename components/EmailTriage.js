@@ -305,12 +305,12 @@ export default function EmailTriage() {
       {/* ── Header ─────────────────────────────────────────────────── */}
       <header>
         <div>
-          <h1>Email Triage</h1>
+          <h1>Gabriel Email Triage Tool</h1>
           <div className="meta">{lastLoaded || "No data loaded"}</div>
         </div>
         <div className="header-buttons">
-          <button className="btn-save" onClick={saveActions}>
-            Save Flag &amp; Archive Script
+          <button className="btn-save btn-deprecated" onClick={saveActions}>
+            Generate script (deprecated)
           </button>
           <button
             className="btn-save btn-update"
@@ -381,8 +381,8 @@ export default function EmailTriage() {
           <span>{toMove}</span> to move
         </div>
         <div className="header-buttons">
-          <button className="btn-save" onClick={saveActions}>
-            Save Flag &amp; Archive Script
+          <button className="btn-save btn-deprecated" onClick={saveActions}>
+            Generate script (deprecated)
           </button>
           <button
             className="btn-save btn-update"
@@ -396,6 +396,19 @@ export default function EmailTriage() {
 
       {/* ── Toast notification ─────────────────────────────────────── */}
       <div className={`toast ${toast ? "show" : ""}`}>{toast}</div>
+
+      {/* ── Progress overlay (blocks all interaction while updating) ── */}
+      {isUpdating && (
+        <div className="progress-overlay">
+          <div className="progress-dialog">
+            <div className="progress-spinner" />
+            <p>Updating emails…</p>
+            <div className="progress-bar-track">
+              <div className="progress-bar-fill" />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Modal — appears after saving to remind user to action ── */}
       {/* ── Modal — appears after saving (Save button only) ────── */}

@@ -18,7 +18,7 @@ import "./globals.css";
 // This metadata object sets the <title> and <meta> tags in the <head>.
 // Next.js handles this automatically — you don't need to write <head> tags yourself.
 export const metadata = {
-  title: "Email Triage",
+  title: "Gabriel Email Triage Tool",
   description: "Review, reclassify, and action emails from Gmail and Outlook",
 };
 
