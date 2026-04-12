@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "outlook": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "C:/Users/gabri/Documents/Claude/mcp-server/outlook-mcp/dist/index.js"
+      ],
+      "env": {}
+    }
+  }
+}
