@@ -12,8 +12,9 @@ const path = require("path");
 
 const PORT    = 8080;
 const ROOT    = __dirname;
-const EMAIL_SOURCE  = "C:\\Users\\gabri\\Documents\\Claude\\Workspace\\Personal Assistance\\email-source";
-const EMAIL_TRIAGE  = "C:\\Users\\gabri\\Documents\\Claude\\Workspace\\Personal Assistance\\email-triage";
+const EMAIL_SOURCE  = "D:\\Gabriel\\OneDrive\\Claude\\Workspace\\Personal Assistance\\email-source\\email-source";
+const EMAIL_TRIAGE  = "D:\\Gabriel\\OneDrive\\Claude\\Workspace\\Personal Assistance\\email-source\\email-triage";
+                      
 
 const MIME = {
   ".html": "text/html",
