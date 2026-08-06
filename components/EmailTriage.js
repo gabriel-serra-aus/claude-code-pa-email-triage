@@ -80,14 +80,17 @@ export default function EmailTriage() {
   // Stores when each source file was last modified (ISO string from the server).
   const [fileModified, setFileModified] = useState({ gmail: null, outlook: null });
 
-  // Controls the "action required" modal that appears after saving.
-  const [showModal, setShowModal] = useState(false);
-
   // Loading state for the "Update Emails" button.
   const [isUpdating, setIsUpdating] = useState(false);
 
   // Results from the execute-actions API (shown in a results modal).
   const [updateResults, setUpdateResults] = useState(null);
+
+  // Which provider's table is currently shown: "gmail", "outlook", or null.
+  // Only ONE provider is displayed at a time. null means "not chosen yet" —
+  // this happens when BOTH source files have data (the user must pick one
+  // via the chooser buttons) or when neither file has data.
+  const [activeProvider, setActiveProvider] = useState(null);
 
   // ── Toast helper ───────────────────────────────────────────────────────────
   // Show a toast message for 3 seconds, then hide it.
@@ -120,6 +123,17 @@ export default function EmailTriage() {
           gmail: data.gmailModified || null,
           outlook: data.outlookModified || null,
         });
+
+        // Decide which provider to show automatically:
+        //   - only Gmail has data   → show Gmail
+        //   - only Outlook has data → show Outlook
+        //   - both have data        → show neither; the user must pick one
+        //     with the chooser buttons at the top of the page
+        const hasGmail = (data.gmail || []).length > 0;
+        const hasOutlook = (data.outlook || []).length > 0;
+        if (hasGmail && !hasOutlook) setActiveProvider("gmail");
+        else if (hasOutlook && !hasGmail) setActiveProvider("outlook");
+        else setActiveProvider(null);
 
         // Record when we loaded the data
         const now = new Date().toLocaleString("en-AU", {
@@ -176,12 +190,16 @@ export default function EmailTriage() {
     setFilters((prev) => ({ ...prev, [src]: cat }));
   }
 
-  // ── Build the output payload for saving ───────────────────────────────────
+  // ── Build the output payload for executing ────────────────────────────────
+  // Only the ACTIVE provider is included in the payload. Gmail actions are
+  // not implemented yet, so the update button is only enabled when Outlook is
+  // displayed, and the API route skips any provider absent from the payload.
   function buildOutput() {
     const generated = new Date().toISOString();
     const result = {};
 
-    for (const src of ["gmail", "outlook"]) {
+    for (const src of [activeProvider]) {
+      if (!src) continue;
       const actions = emails[src].map((e) => ({
         id: e.id,
         date: e.date,
@@ -210,41 +228,19 @@ export default function EmailTriage() {
     return result;
   }
 
-  // ── Save actions ──────────────────────────────────────────────────────────
-  async function saveActions() {
-    const output = buildOutput();
-    try {
-      // POST to our Next.js API route
-      const res = await fetch("/api/save-actions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(output),
-      });
-      if (!res.ok) throw new Error(`Server returned ${res.status}`);
-
-      // Show the modal reminding the user to run the action skill
-      setShowModal(true);
-    } catch (err) {
-      showToast("Save failed — check the console for details");
-      console.error(err);
-    }
-  }
-
-  // ── Save + execute actions (the "Update Emails" flow) ─────────────────────
+  // ── Execute actions (the "Update Emails" flow) ────────────────────────────
   async function updateEmails() {
+    // Safety net — the button is disabled for Gmail, but guard anyway
+    // (Gmail execution is not implemented yet).
+    if (activeProvider !== "outlook") {
+      showToast("Updating is only available for Outlook right now");
+      return;
+    }
     setIsUpdating(true);
     const output = buildOutput();
 
     try {
-      // Step 1: save the action files (same as the Save button)
-      const saveRes = await fetch("/api/save-actions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(output),
-      });
-      if (!saveRes.ok) throw new Error("Save failed");
-
-      // Step 2: execute the actions against Gmail & Outlook
+      // Execute the actions against Gmail & Outlook
       const execRes = await fetch("/api/execute-actions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -262,35 +258,59 @@ export default function EmailTriage() {
     }
   }
 
-  // ── Compute action summary counts ─────────────────────────────────────────
-  const allEmails = [...emails.gmail, ...emails.outlook];
-  const toFlag = allEmails.filter((e) => e.category === "Important").length;
-  const toMove = allEmails.filter((e) => e.category !== "Important").length;
-  const total = allEmails.length;
+  // ── Compute action summary counts (active provider only) ─────────────────
+  // Only one provider is displayed at a time, so the totals in the save bar
+  // reflect just the visible table.
+  const activeEmails = activeProvider ? emails[activeProvider] : [];
+  const toFlag = activeEmails.filter((e) => e.category === "Important").length;
+  const toMove = activeEmails.filter((e) => e.category !== "Important").length;
+  const total = activeEmails.length;
 
-  // ── Check if source files are stale (older than 24 hours) ────────────────
-  // We compare each file's modification time against "now". If either file
-  // was modified more than a day ago, we show a red warning banner.
+  // Which providers actually have data — drives the chooser buttons.
+  const hasData = {
+    gmail: emails.gmail.length > 0,
+    outlook: emails.outlook.length > 0,
+  };
+
+  // ── Per-provider staleness check (6-hour threshold) ───────────────────────
+  // Each source file is checked individually. A stale provider can still be
+  // selected, but its grid is replaced with a warning until the file is
+  // refreshed. A fresh provider is unaffected.
   const now = Date.now();
-  const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+  const STALE_MS = 6 * 60 * 60 * 1000; // 6 hours
 
-  // Find the most recent modification time across both files
-  const modifiedTimes = [fileModified.gmail, fileModified.outlook]
-    .filter(Boolean)
-    .map((iso) => new Date(iso).getTime());
-  const latestModified = modifiedTimes.length > 0 ? Math.max(...modifiedTimes) : null;
-  const isStale = latestModified !== null && now - latestModified > ONE_DAY_MS;
-
-  /** Format a modification timestamp into a human-readable relative string */
-  function formatAge(isoString) {
-    if (!isoString) return "unknown";
-    const ageMs = now - new Date(isoString).getTime();
-    const hours = Math.floor(ageMs / (1000 * 60 * 60));
-    const days = Math.floor(hours / 24);
-    if (days > 0) return `${days} day${days > 1 ? "s" : ""} ago`;
-    if (hours > 0) return `${hours} hour${hours > 1 ? "s" : ""} ago`;
-    return "just now";
+  /** True when a provider's source file is more than 6 hours old */
+  function isStale(src) {
+    const iso = fileModified[src];
+    if (!iso) return false; // no timestamp → can't judge, don't block
+    return now - new Date(iso).getTime() > STALE_MS;
   }
+
+  /** Split a file's age into whole days + leftover hours */
+  function ageParts(iso) {
+    const totalHours = Math.floor((now - new Date(iso).getTime()) / (1000 * 60 * 60));
+    return { days: Math.floor(totalHours / 24), hours: totalHours % 24 };
+  }
+
+  /** Short age label for the chooser buttons, e.g. "2h old", "1d 3h old" */
+  function formatAgeShort(iso) {
+    if (!iso) return "no file";
+    const { days, hours } = ageParts(iso);
+    if (days > 0) return `${days}d ${hours}h old`;
+    if (hours > 0) return `${hours}h old`;
+    return "<1h old";
+  }
+
+  /** Long age wording for the stale warning, e.g. "1 day and 3 hours" */
+  function formatAgeLong(iso) {
+    const { days, hours } = ageParts(iso);
+    return `${days} day${days === 1 ? "" : "s"} and ${hours} hour${hours === 1 ? "" : "s"}`;
+  }
+
+  // Can the user save/execute right now? Only Outlook actions are implemented,
+  // and only when its data is fresh and there is something to act on.
+  const activeIsStale = activeProvider ? isStale(activeProvider) : false;
+  const canAct = activeProvider === "outlook" && !activeIsStale && total > 0;
 
   // ── Render ────────────────────────────────────────────────────────────────
   //
@@ -309,13 +329,10 @@ export default function EmailTriage() {
           <div className="meta">{lastLoaded || "No data loaded"}</div>
         </div>
         <div className="header-buttons">
-          <button className="btn-save btn-deprecated" onClick={saveActions}>
-            Generate script (deprecated)
-          </button>
           <button
             className="btn-save btn-update"
             onClick={updateEmails}
-            disabled={isUpdating || total === 0}
+            disabled={isUpdating || !canAct}
           >
             {isUpdating ? "Updating…" : "Update Emails"}
           </button>
@@ -330,48 +347,111 @@ export default function EmailTriage() {
         </div>
       )}
 
-      {/* ── Stale data warning (source files older than 24 hours) ─── */}
-      {isStale && (
-        <div className="stale-warning">
-          <strong>Source files are outdated!</strong>
-          Gmail data: {formatAge(fileModified.gmail)} — Outlook data: {formatAge(fileModified.outlook)}.
-          <br />
-          Refresh by running <code>/pa-fetch-emails</code> from the
-          Personal Assistance project in Co Work.
+      {/* ── Provider chooser — only one inbox is shown at a time ───── */}
+      {/* Each button shows the age of its source file so staleness is   */}
+      {/* visible before picking. A provider with no data is disabled.   */}
+      {(hasData.gmail || hasData.outlook) && (
+        <div className="provider-chooser">
+          <span className="chooser-label">Inbox:</span>
+          <button
+            className={`provider-btn ${activeProvider === "gmail" ? "active" : ""}`}
+            onClick={() => setActiveProvider("gmail")}
+            disabled={!hasData.gmail}
+          >
+            Gmail (Us)
+            <span className={`provider-age ${isStale("gmail") ? "age-stale" : ""}`}>
+              {hasData.gmail ? formatAgeShort(fileModified.gmail) : "no data"}
+            </span>
+          </button>
+          <button
+            className={`provider-btn ${activeProvider === "outlook" ? "active" : ""}`}
+            onClick={() => setActiveProvider("outlook")}
+            disabled={!hasData.outlook}
+          >
+            Outlook
+            <span className={`provider-age ${isStale("outlook") ? "age-stale" : ""}`}>
+              {hasData.outlook ? formatAgeShort(fileModified.outlook) : "no data"}
+            </span>
+          </button>
+          {activeProvider === null && hasData.gmail && hasData.outlook && (
+            <span className="choose-prompt">
+              Both sources have data — pick which inbox to triage.
+            </span>
+          )}
         </div>
       )}
 
-      {/* ── Source file info (shows when data is fresh) ─────────────── */}
-      {!isStale && latestModified && (
+      {/* ── Source file timestamps — shown individually per provider ── */}
+      {(fileModified.gmail || fileModified.outlook) && (
         <div className="source-info">
-          Source files updated: Gmail {formatAge(fileModified.gmail)} — Outlook {formatAge(fileModified.outlook)}
+          Source updated — Gmail:{" "}
+          {fileModified.gmail
+            ? `${formatDate(fileModified.gmail)} (${formatAgeShort(fileModified.gmail)})`
+            : "no file"}
+          {"  ·  "}Outlook:{" "}
+          {fileModified.outlook
+            ? `${formatDate(fileModified.outlook)} (${formatAgeShort(fileModified.outlook)})`
+            : "no file"}
         </div>
       )}
 
-      {/* ── Main content — one section per email source ────────────── */}
+      {/* ── Gmail actions not implemented yet (friendly notice) ─────── */}
+      {activeProvider === "gmail" && !activeIsStale && (
+        <div className="gmail-notice">
+          <strong>Heads up — updating Gmail emails isn&apos;t implemented yet.</strong>
+          You can review and triage below, but the save buttons are disabled
+          and nothing will be saved or executed for Gmail.
+        </div>
+      )}
+
+      {/* ── Main content — the active provider's table (or a warning) ── */}
       <main>
-        <EmailSection
-          src="gmail"
-          label="Gmail"
-          account="gabrielserraaus@gmail.com"
-          emails={emails.gmail}
-          sort={sorts.gmail}
-          filter={filters.gmail}
-          onSort={onSort}
-          onFilter={onFilter}
-          onCategoryChange={onCategoryChange}
-        />
-        <EmailSection
-          src="outlook"
-          label="Outlook"
-          account="gabriel.serra@outlook.com.au"
-          emails={emails.outlook}
-          sort={sorts.outlook}
-          filter={filters.outlook}
-          onSort={onSort}
-          onFilter={onFilter}
-          onCategoryChange={onCategoryChange}
-        />
+        {/* Nothing selected yet */}
+        {activeProvider === null && (hasData.gmail || hasData.outlook) && (
+          <div className="empty-state">Select an inbox above to start triaging.</div>
+        )}
+        {activeProvider === null && !hasData.gmail && !hasData.outlook && !loadError && (
+          <div className="empty-state">No email data loaded.</div>
+        )}
+
+        {/* Stale provider — block the grid until the source is refreshed */}
+        {activeProvider && activeIsStale && (
+          <div className="stale-warning">
+            <strong>Source file is too old to display.</strong>
+            The {activeProvider === "gmail" ? "Gmail" : "Outlook"} source file is{" "}
+            {formatAgeLong(fileModified[activeProvider])} old. Please close this
+            page and re-run the <code>/pa-triage-email</code> skill in Claude
+            Cowork (PA project) to refresh it.
+          </div>
+        )}
+
+        {/* Fresh provider — show its table */}
+        {activeProvider === "gmail" && !activeIsStale && (
+          <EmailSection
+            src="gmail"
+            label="Gmail (Us)"
+            account="gabrielandarina@gmail.com"
+            emails={emails.gmail}
+            sort={sorts.gmail}
+            filter={filters.gmail}
+            onSort={onSort}
+            onFilter={onFilter}
+            onCategoryChange={onCategoryChange}
+          />
+        )}
+        {activeProvider === "outlook" && !activeIsStale && (
+          <EmailSection
+            src="outlook"
+            label="Outlook"
+            account="gabriel.serra@outlook.com.au"
+            emails={emails.outlook}
+            sort={sorts.outlook}
+            filter={filters.outlook}
+            onSort={onSort}
+            onFilter={onFilter}
+            onCategoryChange={onCategoryChange}
+          />
+        )}
       </main>
 
       {/* ── Bottom save bar ────────────────────────────────────────── */}
@@ -381,13 +461,10 @@ export default function EmailTriage() {
           <span>{toMove}</span> to move
         </div>
         <div className="header-buttons">
-          <button className="btn-save btn-deprecated" onClick={saveActions}>
-            Generate script (deprecated)
-          </button>
           <button
             className="btn-save btn-update"
             onClick={updateEmails}
-            disabled={isUpdating || total === 0}
+            disabled={isUpdating || !canAct}
           >
             {isUpdating ? "Updating…" : "Update Emails"}
           </button>
@@ -406,27 +483,6 @@ export default function EmailTriage() {
             <div className="progress-bar-track">
               <div className="progress-bar-fill" />
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Modal — appears after saving to remind user to action ── */}
-      {/* ── Modal — appears after saving (Save button only) ────── */}
-      {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2>Actions saved successfully</h2>
-            <p>
-              To execute the flag &amp; archive actions on your emails,
-              run the following skill in Co Work:
-            </p>
-            <div className="modal-command">
-              <code>/pa-action-emails</code>
-              <span>from the Personal Assistance project</span>
-            </div>
-            <button className="btn-save modal-ok" onClick={() => setShowModal(false)}>
-              OK
-            </button>
           </div>
         </div>
       )}

@@ -2,11 +2,11 @@
   "mcpServers": {
     "outlook": {
       "command": "node",
-      "args": ["C:/Users/gabri/Documents/Claude/mcp-server/outlook-mcp/dist/index.js"]
+      "args": ["C:/Users/gabri/Documents/Claude Code/mcp-server/outlook-mcp/dist/index.js"]
     },
     "gmail-emails": {
       "command": "node",
-      "args": ["C:/Users/gabri/Documents/Claude/mcp-server/gmail-emails/src/index.js"]
+      "args": ["C:/Users/gabri/Documents/Claude Code/mcp-server/gmail-emails/src/index.js"]
     }
   }
 }

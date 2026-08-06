@@ -2,7 +2,7 @@
   "permissions": {
     "additionalDirectories": [
       "C:\\Users\\gabri\\.claude\\commands",
-      "C:\\Users\\gabri\\Documents\\Claude\\Workspace\\Personal Assistance"
+      "D:\\Gabriel\\OneDrive\\Claude\\Workspace\\Personal Assistance"
     ],
     "allow": [
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('mcpServers', {}\\), indent=2\\)\\)\")"

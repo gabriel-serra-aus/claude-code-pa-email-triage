@@ -18,7 +18,7 @@ import path from "path";
 // The external folder where Skill 1 writes the email JSON files.
 // This is the same path that was in the old server.js.
 const EMAIL_SOURCE =
-  "C:\\Users\\gabri\\Documents\\Claude\\Workspace\\Personal Assistance\\email-source";
+  "D:\\Gabriel\\OneDrive\\Claude\\Workspace\\Personal Assistance\\email-source";
 
 /**
  * GET handler — called when the browser fetches /api/emails

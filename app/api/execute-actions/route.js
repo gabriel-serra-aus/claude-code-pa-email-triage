@@ -1,8 +1,8 @@
 /**
  * POST /api/execute-actions
  *
- * Receives the same payload as /api/save-actions (the buildOutput() result)
- * and actually applies the triage actions to Gmail and Outlook.
+ * Receives the buildOutput() payload from the UI and applies the triage
+ * actions to Gmail and Outlook.
  *
  * Gmail:  archive → add "OLD" label + remove INBOX.  important → star.
  * Outlook: archive → move to OLD folder.  important → flag.
@@ -17,12 +17,18 @@ import axios from "axios";
 import fs from "fs";
 import path from "path";
 
+// ── Feature switch ──────────────────────────────────────────────────────────
+// Gmail execution is temporarily disabled. While false, any gmail payload is
+// ignored and reported back as skipped — no Gmail API call is ever made.
+// Flip to true to re-enable.
+const GMAIL_EXECUTION_ENABLED = false;
+
 // ── Paths to MCP server credentials/tokens ──────────────────────────────────
-const GMAIL_MCP_DIR = "C:\\Users\\gabri\\Documents\\Claude\\mcp-server\\gmail-emails";
+const GMAIL_MCP_DIR = "C:\\Users\\gabri\\Documents\\Claude Code\\mcp-server\\gmail-emails";
 const GMAIL_CREDENTIALS = path.join(GMAIL_MCP_DIR, "credentials.json");
 const GMAIL_TOKEN = path.join(GMAIL_MCP_DIR, "token.json");
 
-const OUTLOOK_MCP_DIR = "C:\\Users\\gabri\\Documents\\Claude\\mcp-server\\outlook-mcp";
+const OUTLOOK_MCP_DIR = "C:\\Users\\gabri\\Documents\\Claude Code\\mcp-server\\outlook-mcp";
 const OUTLOOK_TOKEN_CACHE = path.join(OUTLOOK_MCP_DIR, "token_cache.json");
 const AZURE_CLIENT_ID = "9ca4fb66-0a24-48d5-9e04-c92c41e633ef";
 
@@ -47,10 +53,6 @@ const SYSTEM_LABELS = new Set([
   "CATEGORY_PERSONAL", "CATEGORY_SOCIAL", "CATEGORY_PROMOTIONS",
   "CATEGORY_UPDATES", "CATEGORY_FORUMS",
 ]);
-
-// Where action files live (cleared after processing)
-const TRIAGE_DIR =
-  "C:\\Users\\gabri\\Documents\\Claude\\Workspace\\Personal Assistance\\email-triage";
 
 // ── Gmail helpers ───────────────────────────────────────────────────────────
 
@@ -92,6 +94,14 @@ async function processGmail(actions) {
   const results = { archived: 0, starred: 0, skipped: 0, failed: 0, errors: [] };
 
   if (!actions || actions.length === 0) return results;
+
+  // Feature switch — while disabled, report everything as skipped and never
+  // touch the Gmail API.
+  if (!GMAIL_EXECUTION_ENABLED) {
+    results.skipped = actions.length;
+    results.errors.push("Gmail execution is currently disabled (GMAIL_EXECUTION_ENABLED = false).");
+    return results;
+  }
 
   // Check that credential files exist before trying
   if (!fs.existsSync(GMAIL_CREDENTIALS) || !fs.existsSync(GMAIL_TOKEN)) {
@@ -265,29 +275,6 @@ async function processOutlook(actions) {
   return results;
 }
 
-// ── Clear action files after processing ─────────────────────────────────────
-
-function clearActionFiles() {
-  const empty = {
-    generated: null,
-    total: 0,
-    important: 0,
-    doNothing: 0,
-    archive: 0,
-    actions: [],
-  };
-
-  const gmailPath = path.join(TRIAGE_DIR, "gmail-actions.json");
-  const outlookPath = path.join(TRIAGE_DIR, "outlook-actions.json");
-
-  if (fs.existsSync(gmailPath)) {
-    fs.writeFileSync(gmailPath, JSON.stringify(empty, null, 2));
-  }
-  if (fs.existsSync(outlookPath)) {
-    fs.writeFileSync(outlookPath, JSON.stringify(empty, null, 2));
-  }
-}
-
 // ── Route handler ───────────────────────────────────────────────────────────
 
 export async function POST(request) {
@@ -297,12 +284,9 @@ export async function POST(request) {
     const gmailActions = body.gmail?.actions || [];
     const outlookActions = body.outlook?.actions || [];
 
-    // Process both providers (Gmail first, then Outlook — matches Cowork skill order)
+    // Process both providers (Gmail is a no-op while GMAIL_EXECUTION_ENABLED is false)
     const gmailResults = await processGmail(gmailActions);
     const outlookResults = await processOutlook(outlookActions);
-
-    // Clear action files regardless of individual failures
-    clearActionFiles();
 
     return NextResponse.json({
       ok: true,

@@ -8,25 +8,31 @@ A local web app to review, reclassify, and action emails from Gmail and Outlook.
 
 PA Email Triage is a personal inbox management tool that combines Claude's AI classification with a lightweight browser-based review interface.
 
-Each session works like this: a Claude Code skill connects to your Gmail and Outlook inboxes via MCP connectors, fetches unread emails, and uses Claude to summarise each one and assign it an initial category — **Important** (needs your attention), **FYI** (worth knowing, no action needed), or **Not Important** (noise). The results are written to local JSON files and loaded into a single-page web app.
+Each session works like this: a Claude Code skill connects to your Gmail and Outlook inboxes via MCP connectors, fetches inbox emails, and uses Claude to summarise each one and assign it an initial category — **Important** (needs your attention), **FYI** (worth knowing, no action needed), or **Not Important** (noise). The results are written to local JSON files and loaded into a single-page web app.
 
-In the app you can review every email across both accounts in one place, see what Claude suggested, override any classification with a dropdown, and sort or filter the list however you like. Each row also shows whether an email is already flagged in your mail client alongside what action will be taken. When you're happy, one click on **Save Flag & Archive Script** records your decisions silently back into the HTML file — no dialog, no separate output file.
-
-A second Claude Code skill then reads those decisions and executes them: flagging Important emails and moving everything else out of your inbox, across both Gmail and Outlook simultaneously.
+In the app you can review every email in one place, see what Claude suggested, override any classification, and sort or filter the list however you like. Each row also shows whether an email is already flagged in your mail client alongside what action will be taken. When you're happy, one click on **Update Emails** applies the actions directly to your mailboxes — flagging Important emails and moving everything else out of your inbox.
 
 ---
 
 ## How it works
 
-The workflow has three stages:
+The workflow has two stages:
 
 ```
-Skill 1 (Claude Code)          Web App (Browser)             Skill 2 (Claude Code)
-─────────────────────          ─────────────────             ─────────────────────
-Fetch Gmail + Outlook    →     Review & reclassify     →     Flag + move emails
-via MCP connectors             Save actions into HTML         via MCP connectors
-Write JSON source files        (no file dialog)
+Fetch skill (Claude Code)           Web App (localhost:3000)
+─────────────────────────           ────────────────────────
+Fetch Gmail + Outlook         →     Review & reclassify, then
+via MCP connectors                  "Update Emails" executes the
+Write JSON source files             actions via Gmail/Graph APIs
 ```
+
+There is no separate "execute" skill anymore — the app talks to the Gmail API
+and Microsoft Graph itself, reusing the MCP servers' saved OAuth tokens.
+
+> **Important:** executing actions changes the emails' message IDs (Outlook IDs
+> change when a message moves folders). After an update, re-run the fetch skill
+> to refresh the source files before triaging again — a second execute from the
+> same stale snapshot will fail with "object not found" errors.
 
 ---
 
@@ -39,17 +45,17 @@ pa-email-triage/
 │   ├── page.js                # Home page (renders the EmailTriage component)
 │   ├── globals.css            # All styles
 │   └── api/
-│       ├── emails/route.js    # GET /api/emails — reads email JSON files
-│       └── save-actions/route.js  # POST /api/save-actions — writes triage decisions
+│       ├── emails/route.js           # GET /api/emails — reads email JSON files
+│       └── execute-actions/route.js  # POST /api/execute-actions — applies triage
 ├── components/
 │   └── EmailTriage.js         # Main interactive component (client-side React)
-├── email-source/
-│   ├── gmail-emails.json      # Populated by Skill 1
-│   └── outlook-emails.json    # Populated by Skill 1
 ├── next.config.mjs            # Next.js configuration
-├── package.json               # Dependencies (next, react, react-dom)
+├── package.json               # Dependencies (next, react, googleapis, msal, axios)
 └── README.md
 ```
+
+Email source files live outside the repo, in the Personal Assistance workspace:
+`D:\Gabriel\OneDrive\Claude\Workspace\Personal Assistance\email-source\`
 
 ---
 
@@ -63,37 +69,46 @@ npm run dev
 ```
 
 Then open: [http://localhost:3000](http://localhost:3000)
+(Or run `start-triage.bat`, which does both.)
 
-### 2. Populate email data (Skill 1)
+### 2. Populate email data (fetch skill)
 
-Run **Skill 1** in Claude Code. It will:
-- Connect to Gmail (`gabrielserraaus@gmail.com`) via the Gmail MCP connector
+Run the **pa-email-triage-retrieve** skill. It will:
+- Connect to Gmail (`gabrielandarina@gmail.com`) via the Gmail MCP connector
 - Connect to Outlook (`gabriel.serra@outlook.com.au`) via the local `outlook-mcp` server
 - Fetch inbox emails, classify each one using Claude
-- Write results to `email-source/gmail-emails.json` and `email-source/outlook-emails.json`
+- Write `gmail-emails.json` and `outlook-emails.json` to the workspace `email-source` folder
 
-Reload the browser page after running Skill 1.
+Reload the browser page after running it.
 
 ### 3. Review in the app
 
 - Emails are colour-coded: **pink** = Important, **blue** = FYI, **grey** = Not Important
-- Change any category via the dropdown — row colour and "Will do" badge update instantly
+- Change any category with the buttons — row colour and status update instantly
 - Sort by **Date** or **From** (click column header)
 - Filter by category using the buttons above each table
 - The **Status** column shows:
   - Current flag state (`🚩 Flagged` / `— Not flagged`)
   - What will happen (`→ Flag` / `→ Move to folder`)
 
-### 4. Save actions
+### 4. Update Emails
 
-Click **Save Flag & Archive Script**. The app POSTs to the Next.js API route, which writes the actions as JSON files to the workspace folder.
+Click **Update Emails**. The app POSTs your decisions to `/api/execute-actions`,
+which applies them directly:
 
-### 5. Execute actions (Skill 2)
+| Category | Outlook |
+|---|---|
+| Important | Flag |
+| FYI | Nothing |
+| Not Important | Move to `OLD` folder |
 
-Run **Skill 2** in Claude Code. It will:
-- Read the action JSON files from the workspace folder
-- For each `flag` action → star/flag the email via the MCP connector
-- For each `move` action → move the email out of Inbox via the MCP connector
+A results dialog shows the counts and any errors.
+
+**Gmail execution is temporarily disabled** — Gmail is review-only for now. The
+update button is only enabled for Outlook, and the API skips any Gmail payload.
+To re-enable, set `GMAIL_EXECUTION_ENABLED = true` in
+`app/api/execute-actions/route.js` (Gmail: Important → star, Not Important →
+add `OLD` label + remove from Inbox).
 
 ---
 
@@ -101,7 +116,7 @@ Run **Skill 2** in Claude Code. It will:
 
 ### email-source/gmail-emails.json / outlook-emails.json
 
-Produced by Skill 1. One array of email objects per file:
+Produced by the fetch skill. One array of email objects per file:
 
 ```json
 [
@@ -129,37 +144,34 @@ Produced by Skill 1. One array of email objects per file:
 | `category` | `Important` / `FYI` / `Not Important` |
 | `isFlagged` | Whether the email is already flagged in the mail system |
 
-### email-actions block (inside email-triage.html)
+### POST /api/execute-actions request body
 
-Written by the app on save. Consumed by Skill 2:
+Built by the UI (`buildOutput()`); only the active provider is included:
 
 ```json
 {
-  "generated": "2026-03-28T14:00:00Z",
-  "totalEmails": 9,
-  "toFlag": 3,
-  "toMove": 6,
-  "actions": [
-    { "source": "gmail",   "id": "abc123", "action": "flag" },
-    { "source": "outlook", "id": "xyz789", "action": "move" }
-  ]
+  "outlook": {
+    "generated": "2026-08-06T14:00:00Z",
+    "total": 50, "important": 3, "doNothing": 17, "archive": 30,
+    "actions": [
+      { "id": "abc123", "subject": "...", "triage": "archive" }
+    ]
+  }
 }
 ```
 
-| Field | Description |
-|---|---|
-| `source` | `gmail` or `outlook` |
-| `id` | Message ID — matches the `id` field from the source JSON |
-| `action` | `flag` (Important) or `move` (FYI / Not Important) |
+`triage` is `"archive"` (Not Important), `"important"` (Important), or
+`"do-nothing"` (FYI). The response returns per-provider counts:
+`{ archived, starred/flagged, skipped, failed, errors[] }`.
 
 ---
 
-## MCP connectors
+## MCP connectors / auth
 
 | Account | Connector | Used for |
 |---|---|---|
-| gabrielserraaus@gmail.com | Claude AI Gmail MCP | Fetch, flag emails |
-| gabriel.serra@outlook.com.au | outlook-mcp (local) | Fetch, flag, move emails |
+| gabrielandarina@gmail.com | gmail-emails MCP (local) | Fetch; execution disabled for now (see flag above) |
+| gabriel.serra@outlook.com.au | outlook-mcp (local) | Fetch; app reuses its `token_cache.json` to execute actions |
 
-The `outlook-mcp` server lives at:
-`C:\Users\gabri\Documents\Claude\mcp-server\outlook-mcp`
+Both servers live under:
+`C:\Users\gabri\Documents\Claude Code\mcp-server\`

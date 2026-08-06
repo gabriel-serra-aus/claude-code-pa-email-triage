@@ -47,15 +47,6 @@ header .meta { font-size: 12px; color: #6e7681; margin-top: 2px; }
 .btn-save:hover { background: #388bfd; }
 .btn-save:disabled { background: #30363d; cursor: not-allowed; opacity: 0.6; }
 
-/* ── Deprecated button (grayed out) ──────────────────────────── */
-.btn-deprecated {
-  background: #30363d;
-  color: #6e7681;
-  opacity: 0.5;
-  cursor: default;
-}
-.btn-deprecated:hover { background: #30363d; opacity: 0.6; }
-
 /* ── Update Emails button (green accent) ─────────────────────── */
 .btn-update { background: #238636; }
 .btn-update:hover { background: #2ea043; }
@@ -312,6 +303,72 @@ td.status-cell { min-width: 140px; }
   padding: 10px 32px;
   font-size: 13px;
   color: #3fb950;
+}
+
+/* ── Provider chooser bar (Gmail / Outlook toggle) ────────────── */
+.provider-chooser {
+  background: #161b22;
+  border-bottom: 1px solid #30363d;
+  padding: 12px 32px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.chooser-label {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #6e7681;
+}
+.provider-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #30363d;
+  background: #21262d;
+  color: #c9d1d9;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.provider-btn:hover:not(:disabled) { background: #30363d; }
+.provider-btn.active { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+.provider-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.provider-age {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 1px 7px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.25);
+  color: inherit;
+  opacity: 0.85;
+}
+.provider-age.age-stale { background: #3d1214; color: #ff7b72; opacity: 1; }
+.choose-prompt { font-size: 13px; color: #d29922; font-weight: 500; }
+
+/* ── Gmail "not implemented yet" notice (friendly, blue) ──────── */
+.gmail-notice {
+  background: #131c2e;
+  border-left: 4px solid #388bfd;
+  padding: 12px 32px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #79c0ff;
+}
+.gmail-notice strong { display: block; margin-bottom: 2px; color: #a5d1ff; }
+
+/* ── Empty state (no provider selected / no data) ─────────────── */
+.empty-state {
+  text-align: center;
+  padding: 48px 32px;
+  color: #6e7681;
+  font-size: 14px;
+  font-style: italic;
 }
 
 /* ── Modal overlay + dialog ───────────────────────────────────── */
