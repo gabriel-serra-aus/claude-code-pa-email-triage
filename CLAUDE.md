@@ -43,7 +43,7 @@ If you change it, update the `EMAIL_SOURCE` constant in that route file.
 Triage action semantics (`action.triage` values): `"archive" | "important" | "do-nothing"`.
 
 - Gmail archive → add `OLD` label + remove `INBOX`. Gmail important → add `STARRED`.
-- Outlook archive → move to hardcoded `OUTLOOK_OLD_FOLDER_ID` folder (a custom "OLD" folder, not the built-in Archive). Outlook important → set `flag.flagStatus = "flagged"`.
+- Outlook archive → move to the built-in Archive folder via Graph's well-known `"archive"` destination (no hardcoded folder ID — the mailbox has two folders named "OLD", which made the old hardcoded-ID approach confusing). Outlook important → set `flag.flagStatus = "flagged"`.
 
 If either MCP server's token file is missing, the route reports a per-provider error rather than crashing — the other provider still processes.
 

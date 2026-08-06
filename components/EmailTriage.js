@@ -682,7 +682,13 @@ function EmailSection({
 
 function EmailRow({ src, email, onCategoryChange }) {
   const { name, email: fromEmail } = parseFrom(email.from);
-  const willAction = email.category === "Important" ? "flag" : "move";
+  // Must match buildOutput(): Important → flag, FYI → nothing, rest → archive
+  const willAction =
+    email.category === "Important"
+      ? "flag"
+      : email.category === "FYI"
+        ? "nothing"
+        : "move";
 
   return (
     <tr className={getCatClass(email.category)}>
@@ -729,8 +735,10 @@ function EmailRow({ src, email, onCategoryChange }) {
           )}
           {willAction === "flag" ? (
             <span className="status-will will-flag">→ Flag</span>
+          ) : willAction === "move" ? (
+            <span className="status-will will-move">→ Archive</span>
           ) : (
-            <span className="status-will will-move">→ Move to folder</span>
+            <span className="status-will will-nothing">→ Do nothing</span>
           )}
         </div>
       </td>

@@ -89,7 +89,7 @@ Reload the browser page after running it.
 - Filter by category using the buttons above each table
 - The **Status** column shows:
   - Current flag state (`🚩 Flagged` / `— Not flagged`)
-  - What will happen (`→ Flag` / `→ Move to folder`)
+  - What will happen (`→ Flag` / `→ Archive` / `→ Do nothing`)
 
 ### 4. Update Emails
 
@@ -100,7 +100,7 @@ which applies them directly:
 |---|---|
 | Important | Flag |
 | FYI | Nothing |
-| Not Important | Move to `OLD` folder |
+| Not Important | Move to the built-in **Archive** folder |
 
 A results dialog shows the counts and any errors.
 

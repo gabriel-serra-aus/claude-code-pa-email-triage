@@ -258,6 +258,7 @@ td.status-cell { min-width: 140px; }
 }
 .status-will.will-flag { background: #2d1b1e; color: #f85149; border: 1px solid #6e1b18; }
 .status-will.will-move { background: #131c2e; color: #79c0ff; border: 1px solid #1f3a6e; }
+.status-will.will-nothing { background: #21262d; color: #8b949e; border: 1px solid #30363d; }
 
 .status-block { display: flex; flex-direction: column; gap: 4px; }
 

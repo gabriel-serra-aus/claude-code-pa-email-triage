@@ -5,7 +5,7 @@
  * actions to Gmail and Outlook.
  *
  * Gmail:  archive → add "OLD" label + remove INBOX.  important → star.
- * Outlook: archive → move to OLD folder.  important → flag.
+ * Outlook: archive → move to the built-in Archive folder.  important → flag.
  *
  * Auth tokens are reused from the existing MCP servers (no duplicate OAuth).
  */
@@ -32,9 +32,12 @@ const OUTLOOK_MCP_DIR = "C:\\Users\\gabri\\Documents\\Claude Code\\mcp-server\\o
 const OUTLOOK_TOKEN_CACHE = path.join(OUTLOOK_MCP_DIR, "token_cache.json");
 const AZURE_CLIENT_ID = "9ca4fb66-0a24-48d5-9e04-c92c41e633ef";
 
-// Hardcoded OLD folder ID in Outlook (same as the Cowork skill uses)
-const OUTLOOK_OLD_FOLDER_ID =
-  "AQMkADAwATY0MDABLThhMmUtNjMyNC0wMAItMDAKAC4AAAMTLzebykNBSKW_OFt1Mr34AQC7ZHyNGkSZR67cK0BhujWDAAACAVgAAAA=";
+// Destination for Outlook "archive" actions. "archive" is a Graph well-known
+// folder name that always resolves to the mailbox's built-in Archive folder —
+// no hardcoded folder ID needed. (Previously this was a hardcoded ID that
+// pointed at a root-level "OLD" folder, which was easily confused with the
+// other OLD folder under Inbox.)
+const OUTLOOK_ARCHIVE_FOLDER = "archive";
 
 const OUTLOOK_SCOPES = [
   "Mail.Read",
@@ -253,7 +256,7 @@ async function processOutlook(actions) {
       if (action.triage === "archive") {
         await axios.post(
           `${GRAPH_BASE}/me/messages/${action.id}/move`,
-          { destinationId: OUTLOOK_OLD_FOLDER_ID },
+          { destinationId: OUTLOOK_ARCHIVE_FOLDER },
           { headers }
         );
         results.archived++;
