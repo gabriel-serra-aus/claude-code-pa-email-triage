@@ -2,6 +2,20 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## ⚠️ Current app: `triage-review.html` (static, Aug 2026)
+
+The Next.js app below is **superseded** by the standalone static page `triage-review.html` at the repo root. It is developed here, then copied by Gabriel into the workspace folder `D:\Gabriel\OneDrive\Claude\Workspace\Personal Assistance\email-triage\` next to the file it edits.
+
+New workflow (three steps, all decisions live in ONE file):
+
+1. **pa-email-triage** (Cowork skill) — fetches Outlook + shared Gmail + open Notion tasks, classifies, and writes `email-triage\triage-session.json` (`status: "pending-review"`).
+2. **triage-review.html** — opened in Edge/Chrome; reads and writes that same file via the File System Access API (no server, no APIs, no Gmail/Outlook/Notion calls). Gabriel accepts/rejects/edits task suggestions, sets email actions, completes/edits existing tasks, adds new ones; Confirm flips `status` to `"reviewed"`.
+3. **pa-email-triage-save** (Cowork skill) — applies the reviewed file to Notion + the mailboxes and stamps `status: "processed"`.
+
+Rules the page enforces: gmail-sourced tasks are locked to Group "Gabriel & Arina" and outlook-sourced tasks can never have it; an email with `isTask: true` can't have `emailAction: "archive"`; Confirm is blocked until every email's `decision.isTask` is explicitly true/false. It never writes `processedAt` or outcome fields (those belong to the save skill) and preserves all fields it doesn't touch.
+
+The Next.js app (everything below) is kept **dormant** — it still reads the retired `email-source/*.json` flow and executes actions directly, but is no longer used.
+
 ## Commands
 
 ```bash

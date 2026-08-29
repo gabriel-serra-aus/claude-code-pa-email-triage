@@ -4,6 +4,25 @@ A local web app to review, reclassify, and action emails from Gmail and Outlook.
 
 ---
 
+> ## ⚠️ Superseded — use `triage-review.html`
+>
+> As of Aug 2026 this Next.js app is replaced by the standalone static page
+> **`triage-review.html`** (repo root — copy it into the workspace
+> `email-triage` folder). It needs no server: open it in Edge/Chrome, pick
+> `triage-session.json`, review, and Confirm saves decisions back to the same
+> file.
+>
+> The new three-step loop:
+>
+> 1. **pa-email-triage** skill → writes `triage-session.json` (`pending-review`)
+> 2. **triage-review.html** → review + confirm (`reviewed`) — file in, file out,
+>    no Gmail/Outlook/Notion access
+> 3. **pa-email-triage-save** skill → applies to Notion + mailboxes (`processed`)
+>
+> Everything below describes the old Next.js flow, kept dormant.
+
+---
+
 ## Overview
 
 PA Email Triage is a personal inbox management tool that combines Claude's AI classification with a lightweight browser-based review interface.

@@ -1,0 +1,1208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Email Triage Review</title>
+<style>
+  /* ── Base ─────────────────────────────────────────────────────────── */
+  :root {
+    --bg: #f4f5f7;
+    --card: #ffffff;
+    --border: #dfe3e8;
+    --text: #1f2733;
+    --muted: #6b7685;
+    --accent: #2563eb;
+    --accent-dark: #1d4ed8;
+    --green: #15803d;
+    --green-bg: #e8f7ee;
+    --red: #b91c1c;
+    --red-bg: #fdecec;
+    --amber: #b45309;
+    --amber-bg: #fef3e2;
+    --important-bg: #fdeef4;
+    --important-border: #f3c6d8;
+    --fyi-bg: #eef4fd;
+    --fyi-border: #c9dcf5;
+    --notimp-bg: #f4f5f7;
+    --notimp-border: #e2e5ea;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    font-size: 14px;
+    color: var(--text);
+    background: var(--bg);
+    padding-bottom: 90px; /* room for the sticky confirm bar */
+  }
+  button { font: inherit; cursor: pointer; }
+  a { color: var(--accent); }
+  .hidden { display: none !important; }
+
+  /* ── Header ───────────────────────────────────────────────────────── */
+  header {
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 22px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  header h1 { margin: 0; font-size: 19px; }
+  .meta { color: var(--muted); font-size: 12.5px; margin-top: 3px; }
+  .header-actions { display: flex; gap: 8px; }
+
+  .btn {
+    border: 1px solid var(--border);
+    background: var(--card);
+    border-radius: 7px;
+    padding: 7px 14px;
+    color: var(--text);
+  }
+  .btn:hover { background: #f0f2f5; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    font-weight: 600;
+  }
+  .btn-primary:hover:not(:disabled) { background: var(--accent-dark); }
+  .btn-small { padding: 4px 10px; font-size: 12.5px; border-radius: 6px; }
+  .btn-green { background: var(--green); border-color: var(--green); color: #fff; }
+  .btn-green:hover:not(:disabled) { filter: brightness(1.08); }
+
+  main { max-width: 1280px; margin: 0 auto; padding: 18px 22px; }
+
+  /* ── Landing / status screens ─────────────────────────────────────── */
+  .screen-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 40px;
+    text-align: center;
+    max-width: 620px;
+    margin: 60px auto;
+  }
+  .screen-card h2 { margin-top: 0; }
+  .screen-card p { color: var(--muted); line-height: 1.55; }
+  .screen-card .btn { margin: 6px 4px; }
+  .screen-note { font-size: 12.5px; color: var(--muted); margin-top: 18px; }
+
+  /* ── Sections ─────────────────────────────────────────────────────── */
+  .section {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    background: #fafbfc;
+  }
+  .section-title { font-weight: 600; font-size: 15px; }
+  .badge-count {
+    background: #eceff3;
+    border-radius: 20px;
+    padding: 2px 10px;
+    font-size: 12px;
+    color: var(--muted);
+    margin-left: 8px;
+  }
+  .toolbar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .filter-btn {
+    border: 1px solid var(--border);
+    background: var(--card);
+    border-radius: 20px;
+    padding: 3px 12px;
+    font-size: 12.5px;
+    color: var(--muted);
+  }
+  .filter-btn.active { background: var(--text); border-color: var(--text); color: #fff; }
+  .filter-btn.f-undecided.active { background: var(--amber); border-color: var(--amber); }
+
+  /* ── Email rows ───────────────────────────────────────────────────── */
+  .email-row {
+    display: grid;
+    grid-template-columns: 150px minmax(260px, 1fr) 150px 300px 130px;
+    gap: 14px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    border-left: 4px solid transparent;
+    align-items: start;
+  }
+  .email-row:last-child { border-bottom: none; }
+  .email-row.cat-important { background: var(--important-bg); border-left-color: var(--important-border); }
+  .email-row.cat-fyi { background: var(--fyi-bg); border-left-color: var(--fyi-border); }
+  .email-row.cat-notimportant { background: var(--card); }
+  .email-row.undecided { border-left-color: var(--amber); }
+
+  .cell-date { font-size: 12.5px; color: var(--muted); }
+  .flag-mark { display: block; margin-top: 4px; font-size: 12px; }
+  .subject { font-weight: 600; }
+  .from-line { font-size: 12.5px; margin-top: 2px; }
+  .from-email { color: var(--muted); }
+  .summary { font-size: 12.5px; color: var(--muted); margin-top: 3px; line-height: 1.4; }
+  .tracked-link {
+    display: inline-block;
+    margin-top: 5px;
+    font-size: 12px;
+    background: var(--green-bg);
+    color: var(--green);
+    border-radius: 5px;
+    padding: 2px 8px;
+    text-decoration: none;
+  }
+
+  select {
+    font: inherit;
+    font-size: 12.5px;
+    padding: 4px 6px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--card);
+    max-width: 100%;
+  }
+  .cell-label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-bottom: 4px; }
+
+  /* Task decision block */
+  .task-block { font-size: 12.5px; }
+  .sugg-title { font-weight: 600; }
+  .sugg-meta { color: var(--muted); margin: 3px 0 6px; line-height: 1.4; }
+  .task-badge {
+    display: inline-block;
+    border-radius: 5px;
+    padding: 2px 8px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 5px;
+  }
+  .task-badge.yes { background: var(--green-bg); color: var(--green); }
+  .task-badge.no { background: #eceff3; color: var(--muted); }
+  .task-badge.pending { background: var(--amber-bg); color: var(--amber); }
+  .task-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .edited-note { color: var(--amber); font-size: 12px; margin-top: 3px; }
+
+  /* ── Existing / new task rows ─────────────────────────────────────── */
+  .task-row {
+    display: grid;
+    grid-template-columns: 34px minmax(240px, 1fr) 140px 190px 100px 170px;
+    gap: 12px;
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--border);
+    align-items: start;
+    font-size: 13px;
+  }
+  .task-row:last-child { border-bottom: none; }
+  .task-row.completed { background: var(--green-bg); }
+  .task-title { font-weight: 600; }
+  .task-notes { font-size: 12.5px; color: var(--muted); margin-top: 3px; line-height: 1.4; }
+  .tag-chip {
+    display: inline-block;
+    background: #eceff3;
+    border-radius: 4px;
+    padding: 1px 7px;
+    font-size: 11.5px;
+    color: var(--muted);
+    margin: 1px 3px 1px 0;
+  }
+  .task-row input[type="checkbox"] { width: 17px; height: 17px; margin-top: 2px; }
+
+  /* ── Sticky confirm bar ───────────────────────────────────────────── */
+  .confirm-bar {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    background: var(--card);
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -2px 10px rgba(0,0,0,.06);
+    padding: 12px 22px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    z-index: 20;
+  }
+  .confirm-summary { font-size: 13px; color: var(--muted); }
+  .confirm-summary b { color: var(--text); }
+  .confirm-summary .warn { color: var(--amber); font-weight: 700; }
+  .confirm-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  /* ── Modal (task editor) ──────────────────────────────────────────── */
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(15, 23, 42, .45);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 50;
+  }
+  .modal {
+    background: var(--card);
+    border-radius: 12px;
+    width: min(560px, 94vw);
+    max-height: 90vh;
+    overflow-y: auto;
+    padding: 22px 24px;
+  }
+  .modal h3 { margin: 0 0 14px; }
+  .field { margin-bottom: 13px; }
+  .field label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
+  .field input[type="text"], .field input[type="date"], .field textarea, .field select {
+    width: 100%;
+    font: inherit;
+    font-size: 13.5px;
+    padding: 7px 9px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+  }
+  .field textarea { min-height: 74px; resize: vertical; }
+  .tags-grid { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+  .tags-grid label { display: flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 400; color: var(--text); }
+  .field-hint { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+  .modal-error { color: var(--red); font-size: 12.5px; margin-top: 8px; }
+
+  /* ── Processed summary view ───────────────────────────────────────── */
+  .outcome-row {
+    display: grid;
+    grid-template-columns: minmax(260px, 1fr) 220px;
+    gap: 12px;
+    padding: 9px 16px;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+    align-items: center;
+  }
+  .outcome-row:last-child { border-bottom: none; }
+  .outcome-badge {
+    display: inline-block;
+    border-radius: 5px;
+    padding: 2px 9px;
+    font-size: 12px;
+    background: #eceff3;
+    color: var(--muted);
+    word-break: break-word;
+  }
+  .outcome-badge.ok { background: var(--green-bg); color: var(--green); }
+  .outcome-badge.bad { background: var(--red-bg); color: var(--red); }
+
+  /* ── Toast ────────────────────────────────────────────────────────── */
+  .toast {
+    position: fixed;
+    bottom: 96px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--text);
+    color: #fff;
+    border-radius: 8px;
+    padding: 10px 18px;
+    font-size: 13.5px;
+    opacity: 0;
+    pointer-events: none;
+    transition: all .25s ease;
+    z-index: 60;
+    max-width: 90vw;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Email Triage Review</h1>
+    <div class="meta" id="header-meta">No session loaded</div>
+  </div>
+  <div class="header-actions">
+    <button class="btn" id="btn-open-other">Open file…</button>
+  </div>
+</header>
+
+<main>
+  <!-- ── Landing: no file open yet ─────────────────────────────────── -->
+  <div id="screen-landing" class="screen-card hidden">
+    <h2>Open a triage session</h2>
+    <p>
+      This page reads <code>triage-session.json</code> (created by the
+      <b>pa-email-triage</b> skill), lets you review every email and task,
+      and saves your decisions back to the same file. Apply them afterwards
+      with <b>pa-email-triage-save</b>.
+    </p>
+    <button class="btn btn-primary" id="btn-open">Open triage-session.json…</button>
+    <button class="btn hidden" id="btn-reopen">Reopen last file</button>
+    <div class="screen-note" id="landing-note"></div>
+  </div>
+
+  <!-- ── Unsupported browser ───────────────────────────────────────── -->
+  <div id="screen-unsupported" class="screen-card hidden">
+    <h2>Browser not supported</h2>
+    <p>
+      This app needs the File System Access API to read and write the session
+      file directly. Please open this page in <b>Microsoft Edge</b> or
+      <b>Google Chrome</b>.
+    </p>
+  </div>
+
+  <!-- ── Already reviewed ──────────────────────────────────────────── -->
+  <div id="screen-reviewed" class="screen-card hidden">
+    <h2>✅ Session already confirmed</h2>
+    <p>
+      This session was reviewed and saved. Nothing more to do here —
+      run <b>pa-email-triage-save</b> in Claude to apply the decisions to
+      Notion and the mailboxes.
+    </p>
+  </div>
+
+  <!-- ── Processed (read-only summary) ─────────────────────────────── -->
+  <div id="screen-processed" class="hidden">
+    <div class="screen-card" style="margin: 20px auto; padding: 24px;">
+      <h2 id="processed-title">Session processed</h2>
+      <p id="processed-meta"></p>
+      <p>Run <b>pa-email-triage</b> to start a fresh session.</p>
+    </div>
+    <div id="processed-sections"></div>
+  </div>
+
+  <!-- ── Review UI (pending-review) ────────────────────────────────── -->
+  <div id="screen-review" class="hidden">
+    <!-- Emails -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-title">Emails<span class="badge-count" id="emails-count"></span></div>
+        <div class="toolbar" id="emails-toolbar"></div>
+      </div>
+      <div id="emails-list"></div>
+    </div>
+
+    <!-- Existing Notion tasks -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-title">Open Notion tasks<span class="badge-count" id="tasks-count"></span></div>
+        <div class="toolbar" style="font-size:12.5px;color:var(--muted)">tick = mark Done on save</div>
+      </div>
+      <div id="tasks-list"></div>
+    </div>
+
+    <!-- New manual tasks -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-title">New tasks<span class="badge-count" id="new-count"></span></div>
+        <div class="toolbar">
+          <button class="btn btn-small" id="btn-add-task">+ Add task</button>
+        </div>
+      </div>
+      <div id="new-list"></div>
+    </div>
+  </div>
+</main>
+
+<!-- ── Sticky confirm bar (review mode only) ───────────────────────── -->
+<div class="confirm-bar hidden" id="confirm-bar">
+  <div class="confirm-summary" id="confirm-summary"></div>
+  <div class="confirm-actions">
+    <button class="btn btn-small" id="btn-accept-all">Accept all suggestions</button>
+    <button class="btn btn-small" id="btn-reject-rest">Not-a-task for all undecided without suggestion</button>
+    <button class="btn btn-small hidden" id="btn-show-undecided">Show undecided</button>
+    <button class="btn btn-primary btn-green" id="btn-confirm">Confirm &amp; Save</button>
+  </div>
+</div>
+
+<!-- ── Task editor modal ───────────────────────────────────────────── -->
+<div class="modal-overlay hidden" id="modal-overlay">
+  <div class="modal">
+    <h3 id="modal-title">Edit task</h3>
+    <div class="field">
+      <label for="m-title">Title *</label>
+      <input type="text" id="m-title" maxlength="120">
+    </div>
+    <div class="field">
+      <label for="m-notes">Notes</label>
+      <textarea id="m-notes"></textarea>
+    </div>
+    <div class="field">
+      <label for="m-group">Group</label>
+      <select id="m-group"></select>
+      <div class="field-hint hidden" id="m-group-hint"></div>
+    </div>
+    <div class="field">
+      <label>Tags</label>
+      <div class="tags-grid" id="m-tags"></div>
+    </div>
+    <div class="field">
+      <label for="m-due">Due date</label>
+      <input type="date" id="m-due">
+    </div>
+    <div class="modal-error hidden" id="m-error"></div>
+    <div class="modal-actions">
+      <button class="btn" id="m-cancel">Cancel</button>
+      <button class="btn btn-primary" id="m-apply">Apply</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+/* ══════════════════════════════════════════════════════════════════════
+   Email Triage Review — static, serverless review app.
+
+   Reads and writes ONE file (triage-session.json) via the File System
+   Access API. Talks to no servers: pa-email-triage writes the file,
+   this page edits the `decision` blocks + newTasks and flips status to
+   "reviewed", and pa-email-triage-save applies it afterwards.
+   ══════════════════════════════════════════════════════════════════════ */
+
+// ── Allowed option values (dropdowns only — never free text) ──────────
+const GROUPS = ["Work", "Personal", "Gabriel & Arina", "New Ideas"];
+const TAGS = ["Admin", "Finance", "Health", "Property", "Dev", "Research", "Errand"];
+const CATEGORIES = ["Important", "FYI", "Not Important"];
+const EMAIL_ACTIONS = ["flag", "archive", "none"];
+const SHARED_GROUP = "Gabriel & Arina";
+
+// ── App state ─────────────────────────────────────────────────────────
+let fileHandle = null;   // FileSystemFileHandle for triage-session.json
+let session = null;      // the ENTIRE parsed JSON — mutated in place so
+                         // every field the app doesn't touch is preserved
+let ui = { sortCol: "date", sortDir: "desc", filter: "All" };
+
+// ── Small helpers ─────────────────────────────────────────────────────
+const $ = (id) => document.getElementById(id);
+
+function esc(s) {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+function showToast(msg) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(showToast._timer);
+  showToast._timer = setTimeout(() => t.classList.remove("show"), 3200);
+}
+
+function formatDate(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d)) return iso;
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = d.toLocaleString("en-AU", { month: "short" });
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${day} ${month} ${d.getFullYear()} ${hh}:${mm}`;
+}
+
+function ageLabel(iso) {
+  if (!iso) return "";
+  const hours = Math.floor((Date.now() - new Date(iso).getTime()) / 3600000);
+  if (hours < 1) return "<1h old";
+  if (hours < 24) return `${hours}h old`;
+  return `${Math.floor(hours / 24)}d ${hours % 24}h old`;
+}
+
+/** "Sarah Connor <sarah@x.com>" → { name, email } */
+function parseFrom(from) {
+  const m = String(from ?? "").match(/^(.*?)\s*<(.+?)>$/);
+  return { name: m ? m[1].trim() : String(from ?? ""), email: m ? m[2] : "" };
+}
+
+function getCatClass(cat) {
+  if (cat === "Important") return "cat-important";
+  if (cat === "FYI") return "cat-fyi";
+  return "cat-notimportant";
+}
+
+/** Group hard rule: gmail → locked to shared group; outlook → never shared group. */
+function allowedGroups(source) {
+  if (source === "gmail") return [SHARED_GROUP];
+  if (source === "outlook") return GROUPS.filter((g) => g !== SHARED_GROUP);
+  return GROUPS; // manual newTasks are unrestricted
+}
+
+/** Deep link back to the email, used when creating a task on an email with no suggestion. */
+function emailDeepLink(email) {
+  if (email.suggestedTask && email.suggestedTask.link) return email.suggestedTask.link;
+  if (email.source === "outlook")
+    return "https://outlook.live.com/mail/0/inbox/id/" + encodeURIComponent(email.id);
+  if (email.source === "gmail")
+    return "https://mail.google.com/mail/u/0/#inbox/" + email.id;
+  return "";
+}
+
+// ── IndexedDB: remember the file handle between visits ────────────────
+function idbOpen() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open("triage-review", 1);
+    req.onupgradeneeded = () => req.result.createObjectStore("handles");
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function storeHandle(handle) {
+  try {
+    const db = await idbOpen();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction("handles", "readwrite");
+      tx.objectStore("handles").put(handle, "session");
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch { /* remembering the file is a convenience — never fatal */ }
+}
+async function loadStoredHandle() {
+  try {
+    const db = await idbOpen();
+    return await new Promise((resolve, reject) => {
+      const req = db.transaction("handles").objectStore("handles").get("session");
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+  } catch { return null; }
+}
+
+// ── File open / read ──────────────────────────────────────────────────
+async function openViaPicker() {
+  try {
+    const [handle] = await window.showOpenFilePicker({
+      types: [{ description: "Triage session JSON", accept: { "application/json": [".json"] } }],
+    });
+    await loadFromHandle(handle);
+  } catch (err) {
+    if (err && err.name === "AbortError") return; // user cancelled the picker
+    showToast("Could not open file — " + err.message);
+  }
+}
+
+async function reopenStored() {
+  const handle = await loadStoredHandle();
+  if (!handle) { showToast("No remembered file — use Open"); return; }
+  try {
+    // requestPermission needs a user gesture; this runs from a button click.
+    const perm = await handle.requestPermission({ mode: "readwrite" });
+    if (perm !== "granted") { showToast("Permission not granted"); return; }
+    await loadFromHandle(handle);
+  } catch (err) {
+    showToast("Could not reopen — " + err.message);
+  }
+}
+
+async function loadFromHandle(handle) {
+  const file = await handle.getFile();
+  let parsed;
+  try {
+    parsed = JSON.parse(await file.text());
+  } catch {
+    showToast("That file is not valid JSON");
+    return;
+  }
+  if (!parsed || !Array.isArray(parsed.emails)) {
+    showToast("That file doesn't look like a triage session (no emails array)");
+    return;
+  }
+  fileHandle = handle;
+  session = parsed;
+  applyLoadDefaults();
+  storeHandle(handle);
+  ui.filter = "All";
+  render();
+}
+
+/** Fill in decision defaults for any email the prepare skill left without one. */
+function applyLoadDefaults() {
+  for (const e of session.emails) {
+    if (!e.decision) e.decision = { isTask: null, emailAction: null, task: null };
+    if (e.decision.isTask === undefined) e.decision.isTask = null;
+    if (e.decision.task === undefined) e.decision.task = null;
+    if (!e.decision.emailAction) {
+      // Defaults: already tracked → none; suggestion → flag; otherwise → archive
+      e.decision.emailAction = e.existingTaskUrl ? "none" : e.suggestedTask ? "flag" : "archive";
+    }
+  }
+  session.existingTasks = session.existingTasks || [];
+  for (const t of session.existingTasks) {
+    if (!t.decision) t.decision = { complete: false, edits: null };
+  }
+  session.newTasks = session.newTasks || [];
+}
+
+// ── Decision mutators ─────────────────────────────────────────────────
+function setIsTask(email, value) {
+  email.decision.isTask = value;
+  if (value !== true) email.decision.task = null;
+  // Rule: a task email can never be archived — auto-switch to flag.
+  if (value === true && email.decision.emailAction === "archive") {
+    email.decision.emailAction = "flag";
+  }
+}
+
+// ── Rendering: pick a screen ──────────────────────────────────────────
+function render() {
+  const screens = ["screen-landing", "screen-unsupported", "screen-reviewed", "screen-processed", "screen-review"];
+  screens.forEach((id) => $(id).classList.add("hidden"));
+  $("confirm-bar").classList.add("hidden");
+
+  if (!window.showOpenFilePicker) {
+    $("screen-unsupported").classList.remove("hidden");
+    $("header-meta").textContent = "Unsupported browser";
+    return;
+  }
+
+  if (!session) {
+    $("screen-landing").classList.remove("hidden");
+    $("header-meta").textContent = "No session loaded";
+    loadStoredHandle().then((h) => {
+      if (h) {
+        $("btn-reopen").classList.remove("hidden");
+        $("btn-reopen").textContent = `Reopen ${h.name}`;
+      }
+    });
+    return;
+  }
+
+  $("header-meta").textContent =
+    `${fileHandle ? fileHandle.name + " — " : ""}generated ${formatDate(session.generatedAt)}` +
+    ` (${ageLabel(session.generatedAt)}) — status: ${session.status}`;
+
+  if (session.status === "reviewed") {
+    $("screen-reviewed").classList.remove("hidden");
+  } else if (session.status === "processed" || session.status === "processed-with-errors") {
+    renderProcessed();
+    $("screen-processed").classList.remove("hidden");
+  } else if (session.status === "pending-review") {
+    renderReview();
+    $("screen-review").classList.remove("hidden");
+    $("confirm-bar").classList.remove("hidden");
+  } else {
+    showToast(`Unknown session status "${session.status}" — nothing to do`);
+    $("screen-landing").classList.remove("hidden");
+  }
+}
+
+// ── Review screen ─────────────────────────────────────────────────────
+function renderReview() {
+  renderEmailsToolbar();
+  renderEmails();
+  renderExistingTasks();
+  renderNewTasks();
+  renderConfirmBar();
+}
+
+function renderEmailsToolbar() {
+  const filters = ["All", ...CATEGORIES, "Undecided"];
+  $("emails-toolbar").innerHTML =
+    filters.map((f) =>
+      `<button class="filter-btn ${f === "Undecided" ? "f-undecided" : ""} ${ui.filter === f ? "active" : ""}"
+               data-filter="${esc(f)}">${esc(f)}</button>`).join("") +
+    `<button class="filter-btn" data-sort="date">Date ${ui.sortCol === "date" ? (ui.sortDir === "asc" ? "↑" : "↓") : "↕"}</button>
+     <button class="filter-btn" data-sort="from">From ${ui.sortCol === "from" ? (ui.sortDir === "asc" ? "↑" : "↓") : "↕"}</button>`;
+
+  $("emails-toolbar").querySelectorAll("[data-filter]").forEach((b) =>
+    b.addEventListener("click", () => { ui.filter = b.dataset.filter; renderReview(); }));
+  $("emails-toolbar").querySelectorAll("[data-sort]").forEach((b) =>
+    b.addEventListener("click", () => {
+      const col = b.dataset.sort;
+      if (ui.sortCol === col) ui.sortDir = ui.sortDir === "asc" ? "desc" : "asc";
+      else { ui.sortCol = col; ui.sortDir = col === "date" ? "desc" : "asc"; }
+      renderReview();
+    }));
+}
+
+/** Indices of session.emails after the active filter + sort. */
+function visibleEmailIndices() {
+  let idx = session.emails.map((_, i) => i);
+  if (ui.filter === "Undecided") {
+    idx = idx.filter((i) => session.emails[i].decision.isTask === null);
+  } else if (ui.filter !== "All") {
+    idx = idx.filter((i) => session.emails[i].category === ui.filter);
+  }
+  idx.sort((a, b) => {
+    const ea = session.emails[a], eb = session.emails[b];
+    const va = ui.sortCol === "date" ? (ea.date || "") : String(ea.from || "").toLowerCase();
+    const vb = ui.sortCol === "date" ? (eb.date || "") : String(eb.from || "").toLowerCase();
+    if (va < vb) return ui.sortDir === "asc" ? -1 : 1;
+    if (va > vb) return ui.sortDir === "asc" ? 1 : -1;
+    return 0;
+  });
+  return idx;
+}
+
+function renderEmails() {
+  const idx = visibleEmailIndices();
+  $("emails-count").textContent = `${idx.length} of ${session.emails.length}`;
+  $("emails-list").innerHTML = idx.length === 0
+    ? `<div style="padding:18px;color:var(--muted)">No emails match this filter.</div>`
+    : idx.map(emailRowHTML).join("");
+
+  // Wire up the row controls (event listeners can't live in innerHTML strings)
+  $("emails-list").querySelectorAll("[data-cat]").forEach((sel) =>
+    sel.addEventListener("change", () => {
+      session.emails[+sel.dataset.cat].category = sel.value;
+      renderReview();
+    }));
+  $("emails-list").querySelectorAll("[data-action]").forEach((sel) =>
+    sel.addEventListener("change", () => {
+      session.emails[+sel.dataset.action].decision.emailAction = sel.value;
+      renderReview();
+    }));
+  $("emails-list").querySelectorAll("[data-act]").forEach((btn) =>
+    btn.addEventListener("click", () => onEmailAction(btn.dataset.act, +btn.dataset.i)));
+}
+
+function emailRowHTML(i) {
+  const e = session.emails[i];
+  const d = e.decision;
+  const { name, email } = parseFrom(e.from);
+  const undecided = d.isTask === null;
+
+  // Category dropdown
+  const catSel = `
+    <div class="cell-label">Category</div>
+    <select data-cat="${i}">
+      ${CATEGORIES.map((c) => `<option ${e.category === c ? "selected" : ""}>${esc(c)}</option>`).join("")}
+    </select>`;
+
+  // Email action dropdown — archive is forbidden while the email is a task
+  const actSel = `
+    <div class="cell-label">Email action</div>
+    <select data-action="${i}">
+      ${EMAIL_ACTIONS.map((a) =>
+        `<option value="${a}" ${d.emailAction === a ? "selected" : ""}
+                 ${a === "archive" && d.isTask === true ? "disabled" : ""}>${a}</option>`).join("")}
+    </select>`;
+
+  // Task decision block
+  let taskBlock;
+  const effectiveTask = d.task || e.suggestedTask;
+  if (d.isTask === true) {
+    taskBlock = `
+      <span class="task-badge yes">✓ Task</span>
+      <div class="sugg-title">${esc(effectiveTask ? effectiveTask.title : "(no task details)")}</div>
+      ${d.task ? `<div class="edited-note">edited copy will be used</div>` : ""}
+      <div class="task-actions" style="margin-top:6px">
+        <button class="btn btn-small" data-act="edit" data-i="${i}">Edit</button>
+        <button class="btn btn-small" data-act="undo" data-i="${i}">Undo</button>
+      </div>`;
+  } else if (d.isTask === false) {
+    taskBlock = `
+      <span class="task-badge no">Not a task</span>
+      <div class="task-actions" style="margin-top:6px">
+        <button class="btn btn-small" data-act="undo" data-i="${i}">Undo</button>
+      </div>`;
+  } else if (e.suggestedTask) {
+    const s = e.suggestedTask;
+    taskBlock = `
+      <span class="task-badge pending">Suggested task</span>
+      <div class="sugg-title">${esc(s.title)}</div>
+      <div class="sugg-meta">
+        ${esc(s.group)} · ${(s.tags || []).map(esc).join(", ") || "no tags"} · due ${esc(s.dueDate || "—")}
+      </div>
+      <div class="task-actions">
+        <button class="btn btn-small btn-green" data-act="accept" data-i="${i}">Accept</button>
+        <button class="btn btn-small" data-act="edit" data-i="${i}">Edit &amp; accept</button>
+        <button class="btn btn-small" data-act="reject" data-i="${i}">Reject</button>
+      </div>`;
+  } else {
+    taskBlock = `
+      <span class="task-badge pending">Undecided</span>
+      <div class="task-actions" style="margin-top:6px">
+        <button class="btn btn-small" data-act="edit" data-i="${i}">Make task…</button>
+        <button class="btn btn-small" data-act="reject" data-i="${i}">Not a task</button>
+      </div>`;
+  }
+
+  return `
+    <div class="email-row ${getCatClass(e.category)} ${undecided ? "undecided" : ""}">
+      <div class="cell-date">
+        ${formatDate(e.date)}
+        ${e.isFlagged ? `<span class="flag-mark">🚩 flagged</span>` : ""}
+        <span class="flag-mark" style="color:var(--muted)">${esc(e.source)}</span>
+      </div>
+      <div>
+        <div class="subject">${esc(e.subject)}</div>
+        <div class="from-line">${esc(name)} ${email ? `<span class="from-email">&lt;${esc(email)}&gt;</span>` : ""}</div>
+        <div class="summary">${esc(e.summary)}</div>
+        ${e.existingTaskUrl ? `<a class="tracked-link" href="${esc(e.existingTaskUrl)}" target="_blank" rel="noopener">✓ already tracked in Notion</a>` : ""}
+      </div>
+      <div>${catSel}</div>
+      <div class="task-block"><div class="cell-label">Task decision</div>${taskBlock}</div>
+      <div>${actSel}</div>
+    </div>`;
+}
+
+function onEmailAction(act, i) {
+  const e = session.emails[i];
+  if (act === "accept") {
+    // Accepted unedited: decision.task stays null so the save skill
+    // falls back to suggestedTask (per the schema contract).
+    setIsTask(e, true);
+    renderReview();
+  } else if (act === "reject") {
+    setIsTask(e, false);
+    renderReview();
+  } else if (act === "undo") {
+    e.decision.isTask = null;
+    e.decision.task = null;
+    renderReview();
+  } else if (act === "edit") {
+    openTaskEditor({
+      heading: e.suggestedTask || e.decision.task ? "Edit task" : "Create task from email",
+      source: e.source, // group hard rule applies to email-derived tasks
+      initial: e.decision.task || e.suggestedTask || { title: "", notes: "", group: allowedGroups(e.source)[0], tags: [], dueDate: "", link: "" },
+      onApply(values) {
+        // The edited copy goes into decision.task — link is preserved
+        // (never hand-edited) and generated for inline-created tasks.
+        e.decision.task = { ...values, link: (e.decision.task && e.decision.task.link) || (e.suggestedTask && e.suggestedTask.link) || emailDeepLink(e) };
+        setIsTask(e, true);
+        renderReview();
+      },
+    });
+  }
+}
+
+// ── Existing Notion tasks ─────────────────────────────────────────────
+function renderExistingTasks() {
+  const tasks = session.existingTasks;
+  $("tasks-count").textContent = String(tasks.length);
+  $("tasks-list").innerHTML = tasks.length === 0
+    ? `<div style="padding:18px;color:var(--muted)">No open tasks in this session.</div>`
+    : tasks.map((t, i) => {
+        // Show the task with any pending edits layered on top
+        const v = { ...t, ...(t.decision.edits || {}) };
+        const editedFields = t.decision.edits ? Object.keys(t.decision.edits) : [];
+        return `
+          <div class="task-row ${t.decision.complete ? "completed" : ""}">
+            <div><input type="checkbox" data-complete="${i}" ${t.decision.complete ? "checked" : ""} title="Mark Done on save"></div>
+            <div>
+              <div class="task-title"><a href="${esc(t.url)}" target="_blank" rel="noopener">${esc(v.title)}</a></div>
+              ${v.notes ? `<div class="task-notes">${esc(v.notes)}</div>` : ""}
+              ${editedFields.length ? `<div class="edited-note">edited: ${editedFields.map(esc).join(", ")}</div>` : ""}
+            </div>
+            <div>${esc(v.group || "—")}<div class="task-notes">${esc(t.status || "")}</div></div>
+            <div>${(v.tags || []).map((tg) => `<span class="tag-chip">${esc(tg)}</span>`).join("") || "—"}</div>
+            <div>${esc(v.dueDate || "—")}</div>
+            <div class="task-actions">
+              <button class="btn btn-small" data-edit-task="${i}">Edit</button>
+              ${t.decision.edits ? `<button class="btn btn-small" data-reset-task="${i}">Reset edits</button>` : ""}
+            </div>
+          </div>`;
+      }).join("");
+
+  $("tasks-list").querySelectorAll("[data-complete]").forEach((cb) =>
+    cb.addEventListener("change", () => {
+      session.existingTasks[+cb.dataset.complete].decision.complete = cb.checked;
+      renderReview();
+    }));
+  $("tasks-list").querySelectorAll("[data-edit-task]").forEach((btn) =>
+    btn.addEventListener("click", () => editExistingTask(+btn.dataset.editTask)));
+  $("tasks-list").querySelectorAll("[data-reset-task]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      session.existingTasks[+btn.dataset.resetTask].decision.edits = null;
+      renderReview();
+    }));
+}
+
+function editExistingTask(i) {
+  const t = session.existingTasks[i];
+  const current = { ...t, ...(t.decision.edits || {}) };
+  openTaskEditor({
+    heading: "Edit Notion task",
+    source: null, // existing tasks aren't re-restricted by mailbox — edit freely
+    initial: { title: current.title, notes: current.notes || "", group: current.group, tags: current.tags || [], dueDate: current.dueDate || "" },
+    onApply(values) {
+      // Only CHANGED fields (vs the original Notion values) go into decision.edits.
+      const edits = {};
+      if (values.title !== t.title) edits.title = values.title;
+      if ((values.notes || "") !== (t.notes || "")) edits.notes = values.notes;
+      if (values.group !== t.group) edits.group = values.group;
+      if ((values.dueDate || "") !== (t.dueDate || "")) edits.dueDate = values.dueDate;
+      const sameTags = JSON.stringify([...(values.tags || [])].sort()) === JSON.stringify([...(t.tags || [])].sort());
+      if (!sameTags) edits.tags = values.tags;
+      t.decision.edits = Object.keys(edits).length ? edits : null;
+      renderReview();
+    },
+  });
+}
+
+// ── New manual tasks ──────────────────────────────────────────────────
+function renderNewTasks() {
+  const tasks = session.newTasks;
+  $("new-count").textContent = String(tasks.length);
+  $("new-list").innerHTML = tasks.length === 0
+    ? `<div style="padding:18px;color:var(--muted)">No new tasks added.</div>`
+    : tasks.map((t, i) => `
+        <div class="task-row">
+          <div></div>
+          <div>
+            <div class="task-title">${esc(t.title)}</div>
+            ${t.notes ? `<div class="task-notes">${esc(t.notes)}</div>` : ""}
+          </div>
+          <div>${esc(t.group || "—")}</div>
+          <div>${(t.tags || []).map((tg) => `<span class="tag-chip">${esc(tg)}</span>`).join("") || "—"}</div>
+          <div>${esc(t.dueDate || "—")}</div>
+          <div class="task-actions">
+            <button class="btn btn-small" data-edit-new="${i}">Edit</button>
+            <button class="btn btn-small" data-del-new="${i}">Remove</button>
+          </div>
+        </div>`).join("");
+
+  $("new-list").querySelectorAll("[data-edit-new]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      const i = +btn.dataset.editNew;
+      const t = session.newTasks[i];
+      openTaskEditor({
+        heading: "Edit new task",
+        source: null,
+        initial: { title: t.title, notes: t.notes || "", group: t.group || "Personal", tags: t.tags || [], dueDate: t.dueDate || "" },
+        onApply(values) { session.newTasks[i] = values; renderReview(); },
+      });
+    }));
+  $("new-list").querySelectorAll("[data-del-new]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      session.newTasks.splice(+btn.dataset.delNew, 1);
+      renderReview();
+    }));
+}
+
+// ── Confirm bar ───────────────────────────────────────────────────────
+function counts() {
+  const emails = session.emails;
+  return {
+    accepted: emails.filter((e) => e.decision.isTask === true).length,
+    rejected: emails.filter((e) => e.decision.isTask === false).length,
+    undecided: emails.filter((e) => e.decision.isTask === null).length,
+    completions: session.existingTasks.filter((t) => t.decision.complete).length,
+    edits: session.existingTasks.filter((t) => t.decision.edits).length,
+    newTasks: session.newTasks.length,
+  };
+}
+
+function renderConfirmBar() {
+  const c = counts();
+  $("confirm-summary").innerHTML =
+    `<b>${c.accepted}</b> tasks accepted · <b>${c.rejected}</b> not-a-task · ` +
+    (c.undecided > 0 ? `<span class="warn">${c.undecided} undecided</span> · ` : "") +
+    `<b>${c.completions}</b> to complete · <b>${c.edits}</b> edited · <b>${c.newTasks}</b> new`;
+  $("btn-confirm").disabled = c.undecided > 0;
+  $("btn-confirm").textContent = c.undecided > 0
+    ? `Confirm & Save (${c.undecided} undecided)` : "Confirm & Save";
+  $("btn-show-undecided").classList.toggle("hidden", c.undecided === 0);
+}
+
+function acceptAllSuggestions() {
+  let n = 0;
+  for (const e of session.emails) {
+    if (e.suggestedTask && e.decision.isTask === null) { setIsTask(e, true); n++; }
+  }
+  showToast(n ? `Accepted ${n} suggestion${n === 1 ? "" : "s"}` : "No undecided suggestions");
+  renderReview();
+}
+
+function rejectRest() {
+  let n = 0;
+  for (const e of session.emails) {
+    if (!e.suggestedTask && e.decision.isTask === null) { setIsTask(e, false); n++; }
+  }
+  showToast(n ? `Marked ${n} email${n === 1 ? "" : "s"} as not-a-task` : "Nothing to mark");
+  renderReview();
+}
+
+// ── Confirm & Save ────────────────────────────────────────────────────
+async function confirmSave() {
+  const c = counts();
+  if (c.undecided > 0) {
+    showToast(`${c.undecided} emails still undecided — every email needs a yes/no`);
+    ui.filter = "Undecided";
+    renderReview();
+    return;
+  }
+
+  // Defensive re-check of the group hard rule before anything is written.
+  for (const e of session.emails) {
+    if (e.decision.task) {
+      const ok = allowedGroups(e.source);
+      if (!ok.includes(e.decision.task.group)) e.decision.task.group = ok[0];
+    }
+  }
+
+  try {
+    // Stale-tab guard: only save over a file that is still pending-review,
+    // so a forgotten old tab can't clobber a reviewed/processed session.
+    const onDisk = JSON.parse(await (await fileHandle.getFile()).text());
+    if (onDisk.status !== "pending-review") {
+      showToast(`Not saved — the file on disk is already "${onDisk.status}". Reload to see it.`);
+      return;
+    }
+
+    session.status = "reviewed";
+    // Never set processedAt or outcome fields — those belong to pa-email-triage-save.
+    const writable = await fileHandle.createWritable();
+    await writable.write(JSON.stringify(session, null, 2));
+    await writable.close();
+    showToast("Saved — session marked as reviewed");
+    render();
+  } catch (err) {
+    session.status = "pending-review"; // roll back so the UI stays editable
+    showToast("Save failed — " + err.message);
+  }
+}
+
+// ── Processed (read-only) summary ─────────────────────────────────────
+/** Best-effort read of whatever per-item outcome field the save skill stamped. */
+function outcomeOf(item) {
+  for (const key of ["outcome", "result", "applied", "processed"]) {
+    if (typeof item[key] === "string" && item[key]) return item[key];
+  }
+  return null;
+}
+
+function outcomeBadge(text, fallback) {
+  const value = text || fallback || "—";
+  const cls = /fail/i.test(value) ? "bad" : text ? "ok" : "";
+  return `<span class="outcome-badge ${cls}">${esc(value)}</span>`;
+}
+
+function renderProcessed() {
+  $("processed-title").textContent = session.status === "processed-with-errors"
+    ? "⚠️ Session processed with errors" : "✅ Session processed";
+  $("processed-meta").textContent =
+    `Generated ${formatDate(session.generatedAt)}` +
+    (session.processedAt ? ` · applied ${formatDate(session.processedAt)}` : "");
+
+  const emailRows = session.emails.map((e) => {
+    const d = e.decision || {};
+    const fallback = d.isTask === true ? `task · ${d.emailAction || "none"}` : (d.emailAction || "none");
+    return `<div class="outcome-row"><div>${esc(e.subject)}</div><div>${outcomeBadge(outcomeOf(e), fallback)}</div></div>`;
+  }).join("");
+
+  const taskRows = (session.existingTasks || []).map((t) => {
+    const d = t.decision || {};
+    const fallback = d.complete ? "completed" : d.edits ? "edited" : "untouched";
+    return `<div class="outcome-row"><div>${esc(t.title)}</div><div>${outcomeBadge(outcomeOf(t), fallback)}</div></div>`;
+  }).join("");
+
+  const newRows = (session.newTasks || []).map((t) =>
+    `<div class="outcome-row"><div>${esc(t.title)}</div><div>${outcomeBadge(outcomeOf(t), "created")}</div></div>`).join("");
+
+  $("processed-sections").innerHTML = `
+    <div class="section">
+      <div class="section-header"><div class="section-title">Emails<span class="badge-count">${session.emails.length}</span></div></div>
+      ${emailRows}
+    </div>
+    <div class="section">
+      <div class="section-header"><div class="section-title">Existing tasks<span class="badge-count">${(session.existingTasks || []).length}</span></div></div>
+      ${taskRows || `<div style="padding:16px;color:var(--muted)">None</div>`}
+    </div>
+    <div class="section">
+      <div class="section-header"><div class="section-title">New tasks<span class="badge-count">${(session.newTasks || []).length}</span></div></div>
+      ${newRows || `<div style="padding:16px;color:var(--muted)">None</div>`}
+    </div>`;
+}
+
+// ── Task editor modal ─────────────────────────────────────────────────
+let modalOnApply = null;
+
+function openTaskEditor({ heading, source, initial, onApply }) {
+  modalOnApply = onApply;
+  $("modal-title").textContent = heading;
+  $("m-title").value = initial.title || "";
+  $("m-notes").value = initial.notes || "";
+  $("m-due").value = initial.dueDate || "";
+  $("m-error").classList.add("hidden");
+
+  // Group dropdown obeys the hard rule for email-derived tasks
+  const groups = allowedGroups(source);
+  $("m-group").innerHTML = groups.map((g) =>
+    `<option ${g === initial.group ? "selected" : ""}>${esc(g)}</option>`).join("");
+  $("m-group").disabled = groups.length === 1;
+  const hint = $("m-group-hint");
+  if (source === "gmail") {
+    hint.textContent = "Shared Gmail email — group is locked to Gabriel & Arina.";
+    hint.classList.remove("hidden");
+  } else if (source === "outlook") {
+    hint.textContent = "Outlook email — Gabriel & Arina is not available.";
+    hint.classList.remove("hidden");
+  } else {
+    hint.classList.add("hidden");
+  }
+
+  $("m-tags").innerHTML = TAGS.map((t) => `
+    <label><input type="checkbox" value="${esc(t)}" ${(initial.tags || []).includes(t) ? "checked" : ""}> ${esc(t)}</label>`).join("");
+
+  $("modal-overlay").classList.remove("hidden");
+  $("m-title").focus();
+}
+
+function closeModal() {
+  $("modal-overlay").classList.add("hidden");
+  modalOnApply = null;
+}
+
+function applyModal() {
+  const title = $("m-title").value.trim();
+  if (!title) {
+    $("m-error").textContent = "A title is required.";
+    $("m-error").classList.remove("hidden");
+    return;
+  }
+  const values = {
+    title,
+    notes: $("m-notes").value.trim(),
+    group: $("m-group").value,
+    tags: [...$("m-tags").querySelectorAll("input:checked")].map((cb) => cb.value),
+    dueDate: $("m-due").value, // "YYYY-MM-DD" straight from the date input
+  };
+  const cb = modalOnApply;
+  closeModal();
+  if (cb) cb(values);
+}
+
+// ── Wire up static buttons & boot ─────────────────────────────────────
+$("btn-open").addEventListener("click", openViaPicker);
+$("btn-open-other").addEventListener("click", openViaPicker);
+$("btn-reopen").addEventListener("click", reopenStored);
+$("btn-add-task").addEventListener("click", () =>
+  openTaskEditor({
+    heading: "New task",
+    source: null,
+    initial: { title: "", notes: "", group: "Personal", tags: [], dueDate: "" },
+    onApply(values) { session.newTasks.push(values); renderReview(); },
+  }));
+$("btn-accept-all").addEventListener("click", acceptAllSuggestions);
+$("btn-reject-rest").addEventListener("click", rejectRest);
+$("btn-show-undecided").addEventListener("click", () => { ui.filter = "Undecided"; renderReview(); });
+$("btn-confirm").addEventListener("click", confirmSave);
+$("m-cancel").addEventListener("click", closeModal);
+$("m-apply").addEventListener("click", applyModal);
+$("modal-overlay").addEventListener("click", (ev) => {
+  if (ev.target === $("modal-overlay")) closeModal();
+});
+
+// Boot: if the stored handle is already granted, load it silently;
+// otherwise the landing screen offers a one-click "Reopen".
+(async function boot() {
+  render();
+  if (!window.showOpenFilePicker) return;
+  const stored = await loadStoredHandle();
+  if (stored) {
+    try {
+      const perm = await stored.queryPermission({ mode: "readwrite" });
+      if (perm === "granted") { await loadFromHandle(stored); return; }
+    } catch { /* fall through to the landing screen */ }
+    $("btn-reopen").classList.remove("hidden");
+    $("btn-reopen").textContent = `Reopen ${stored.name}`;
+  }
+})();
+</script>
+</body>
+</html>
