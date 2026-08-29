@@ -26,6 +26,45 @@
     --fyi-border: #c9dcf5;
     --notimp-bg: #f4f5f7;
     --notimp-border: #e2e5ea;
+    --subtle: #fafbfc;      /* section header background */
+    --chip: #eceff3;        /* neutral badges / chips */
+    --hover: #f0f2f5;
+    --shadow: rgba(0,0,0,.06);
+    --overlay: rgba(15, 23, 42, .45);
+    --toast-bg: #1f2733;
+    --toast-text: #ffffff;
+    --on-dark: #ffffff;     /* text on filled (active) buttons */
+    color-scheme: light;
+  }
+  [data-theme="dark"] {
+    --bg: #0f1419;
+    --card: #1a2029;
+    --border: #2c3542;
+    --text: #e6eaf0;
+    --muted: #93a0b1;
+    --accent: #3b82f6;
+    --accent-dark: #60a5fa;
+    --green: #4ade80;
+    --green-bg: #14301f;
+    --red: #f87171;
+    --red-bg: #3a1a1a;
+    --amber: #fbbf24;
+    --amber-bg: #3a2a10;
+    --important-bg: #2b1c25;
+    --important-border: #7a3b5a;
+    --fyi-bg: #172033;
+    --fyi-border: #2f4a7a;
+    --notimp-bg: #1a2029;
+    --notimp-border: #2c3542;
+    --subtle: #1f2631;
+    --chip: #2a3340;
+    --hover: #242c38;
+    --shadow: rgba(0,0,0,.4);
+    --overlay: rgba(0, 0, 0, .6);
+    --toast-bg: #e6eaf0;
+    --toast-text: #0f1419;
+    --on-dark: #0f1419;
+    color-scheme: dark;
   }
   * { box-sizing: border-box; }
   body {
@@ -35,6 +74,7 @@
     color: var(--text);
     background: var(--bg);
     padding-bottom: 90px; /* room for the sticky confirm bar */
+    transition: background .2s ease, color .2s ease;
   }
   button { font: inherit; cursor: pointer; }
   a { color: var(--accent); }
@@ -62,7 +102,7 @@
     padding: 7px 14px;
     color: var(--text);
   }
-  .btn:hover { background: #f0f2f5; }
+  .btn:hover { background: var(--hover); }
   .btn:disabled { opacity: .45; cursor: not-allowed; }
   .btn-primary {
     background: var(--accent);
@@ -72,7 +112,8 @@
   }
   .btn-primary:hover:not(:disabled) { background: var(--accent-dark); }
   .btn-small { padding: 4px 10px; font-size: 12.5px; border-radius: 6px; }
-  .btn-green { background: var(--green); border-color: var(--green); color: #fff; }
+  .btn-green { background: var(--green); border-color: var(--green); color: var(--on-dark); }
+  .theme-toggle { display: inline-flex; align-items: center; gap: 6px; }
   .btn-green:hover:not(:disabled) { filter: brightness(1.08); }
 
   main { max-width: 1280px; margin: 0 auto; padding: 18px 22px; }
@@ -89,8 +130,46 @@
   }
   .screen-card h2 { margin-top: 0; }
   .screen-card p { color: var(--muted); line-height: 1.55; }
+  code { background: var(--chip); padding: 1px 5px; border-radius: 4px; }
   .screen-card .btn { margin: 6px 4px; }
   .screen-note { font-size: 12.5px; color: var(--muted); margin-top: 18px; }
+
+  /* ── Tabs (Personal / Gabriel & Arina / All) ──────────────────────── */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 18px;
+    border-bottom: 2px solid var(--border);
+  }
+  .tab {
+    background: none;
+    border: none;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    padding: 10px 18px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--muted);
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab .tab-count {
+    background: var(--chip);
+    border-radius: 20px;
+    padding: 1px 8px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--muted);
+    margin-left: 6px;
+  }
+  .tab .tab-warn {
+    background: var(--amber-bg);
+    color: var(--amber);
+    border-radius: 20px;
+    padding: 1px 8px;
+    font-size: 12px;
+    margin-left: 4px;
+  }
 
   /* ── Sections ─────────────────────────────────────────────────────── */
   .section {
@@ -108,11 +187,11 @@
     gap: 10px;
     padding: 12px 16px;
     border-bottom: 1px solid var(--border);
-    background: #fafbfc;
+    background: var(--subtle);
   }
   .section-title { font-weight: 600; font-size: 15px; }
   .badge-count {
-    background: #eceff3;
+    background: var(--chip);
     border-radius: 20px;
     padding: 2px 10px;
     font-size: 12px;
@@ -128,8 +207,8 @@
     font-size: 12.5px;
     color: var(--muted);
   }
-  .filter-btn.active { background: var(--text); border-color: var(--text); color: #fff; }
-  .filter-btn.f-undecided.active { background: var(--amber); border-color: var(--amber); }
+  .filter-btn.active { background: var(--text); border-color: var(--text); color: var(--bg); }
+  .filter-btn.f-undecided.active { background: var(--amber); border-color: var(--amber); color: var(--on-dark); }
 
   /* ── Email rows ───────────────────────────────────────────────────── */
   .email-row {
@@ -171,6 +250,7 @@
     border: 1px solid var(--border);
     border-radius: 6px;
     background: var(--card);
+    color: var(--text);
     max-width: 100%;
   }
   .cell-label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-bottom: 4px; }
@@ -188,7 +268,7 @@
     margin-bottom: 5px;
   }
   .task-badge.yes { background: var(--green-bg); color: var(--green); }
-  .task-badge.no { background: #eceff3; color: var(--muted); }
+  .task-badge.no { background: var(--chip); color: var(--muted); }
   .task-badge.pending { background: var(--amber-bg); color: var(--amber); }
   .task-actions { display: flex; gap: 6px; flex-wrap: wrap; }
   .edited-note { color: var(--amber); font-size: 12px; margin-top: 3px; }
@@ -209,7 +289,7 @@
   .task-notes { font-size: 12.5px; color: var(--muted); margin-top: 3px; line-height: 1.4; }
   .tag-chip {
     display: inline-block;
-    background: #eceff3;
+    background: var(--chip);
     border-radius: 4px;
     padding: 1px 7px;
     font-size: 11.5px;
@@ -224,7 +304,7 @@
     bottom: 0; left: 0; right: 0;
     background: var(--card);
     border-top: 1px solid var(--border);
-    box-shadow: 0 -2px 10px rgba(0,0,0,.06);
+    box-shadow: 0 -2px 10px var(--shadow);
     padding: 12px 22px;
     display: flex;
     justify-content: space-between;
@@ -241,7 +321,7 @@
   /* ── Modal (task editor) ──────────────────────────────────────────── */
   .modal-overlay {
     position: fixed; inset: 0;
-    background: rgba(15, 23, 42, .45);
+    background: var(--overlay);
     display: flex; align-items: center; justify-content: center;
     z-index: 50;
   }
@@ -263,6 +343,8 @@
     padding: 7px 9px;
     border: 1px solid var(--border);
     border-radius: 7px;
+    background: var(--card);
+    color: var(--text);
   }
   .field textarea { min-height: 74px; resize: vertical; }
   .tags-grid { display: flex; flex-wrap: wrap; gap: 4px 14px; }
@@ -287,7 +369,7 @@
     border-radius: 5px;
     padding: 2px 9px;
     font-size: 12px;
-    background: #eceff3;
+    background: var(--chip);
     color: var(--muted);
     word-break: break-word;
   }
@@ -300,8 +382,8 @@
     bottom: 96px;
     left: 50%;
     transform: translateX(-50%) translateY(20px);
-    background: var(--text);
-    color: #fff;
+    background: var(--toast-bg);
+    color: var(--toast-text);
     border-radius: 8px;
     padding: 10px 18px;
     font-size: 13.5px;
@@ -322,6 +404,7 @@
     <div class="meta" id="header-meta">No session loaded</div>
   </div>
   <div class="header-actions">
+    <button class="btn theme-toggle" id="btn-theme" title="Toggle light / dark mode">🌙 Dark</button>
     <button class="btn" id="btn-open-other">Open file…</button>
   </div>
 </header>
@@ -373,6 +456,9 @@
 
   <!-- ── Review UI (pending-review) ────────────────────────────────── -->
   <div id="screen-review" class="hidden">
+    <!-- Tab bar: each tab is its own page with emails + tasks for that scope -->
+    <div class="tabs" id="tabs"></div>
+
     <!-- Emails -->
     <div class="section">
       <div class="section-header">
@@ -469,11 +555,50 @@ const CATEGORIES = ["Important", "FYI", "Not Important"];
 const EMAIL_ACTIONS = ["flag", "archive", "none"];
 const SHARED_GROUP = "Gabriel & Arina";
 
+// ── Tabs ──────────────────────────────────────────────────────────────
+// personal = Outlook emails + tasks in any group except the shared one
+// shared   = Gmail emails   + tasks in "Gabriel & Arina"
+// all      = everything
+const TABS = [
+  { id: "personal", label: "Personal" },
+  { id: "shared",   label: SHARED_GROUP },
+  { id: "all",      label: "All" },
+];
+function emailInTab(e, tab) {
+  if (tab === "all") return true;
+  return tab === "shared" ? e.source === "gmail" : e.source !== "gmail";
+}
+function taskInTab(t, tab) {
+  if (tab === "all") return true;
+  return tab === "shared" ? t.group === SHARED_GROUP : t.group !== SHARED_GROUP;
+}
+/** Default group for a task created from the current tab. */
+function tabDefaultGroup(tab) {
+  return tab === "shared" ? SHARED_GROUP : "Personal";
+}
+
+// ── Theme (light / dark) ──────────────────────────────────────────────
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  const btn = document.getElementById("btn-theme");
+  if (btn) btn.textContent = theme === "dark" ? "☀️ Light" : "🌙 Dark";
+  try { localStorage.setItem("triage-theme", theme); } catch { /* optional */ }
+}
+function initTheme() {
+  let theme = null;
+  try { theme = localStorage.getItem("triage-theme"); } catch { /* optional */ }
+  if (!theme) theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  applyTheme(theme);
+}
+function toggleTheme() {
+  applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+}
+
 // ── App state ─────────────────────────────────────────────────────────
 let fileHandle = null;   // FileSystemFileHandle for triage-session.json
 let session = null;      // the ENTIRE parsed JSON — mutated in place so
                          // every field the app doesn't touch is preserved
-let ui = { sortCol: "date", sortDir: "desc", filter: "All" };
+let ui = { sortCol: "date", sortDir: "desc", filter: "All", tab: "personal" };
 
 // ── Small helpers ─────────────────────────────────────────────────────
 const $ = (id) => document.getElementById(id);
@@ -615,6 +740,7 @@ async function loadFromHandle(handle) {
   applyLoadDefaults();
   storeHandle(handle);
   ui.filter = "All";
+  ui.tab = "personal";
   render();
 }
 
@@ -691,11 +817,28 @@ function render() {
 
 // ── Review screen ─────────────────────────────────────────────────────
 function renderReview() {
+  renderTabs();
   renderEmailsToolbar();
   renderEmails();
   renderExistingTasks();
   renderNewTasks();
   renderConfirmBar();
+}
+
+function renderTabs() {
+  $("tabs").innerHTML = TABS.map((t) => {
+    const emails = session.emails.filter((e) => emailInTab(e, t.id));
+    const undecided = emails.filter((e) => e.decision.isTask === null).length;
+    const tasks = session.existingTasks.filter((x) => taskInTab(x, t.id)).length
+                + session.newTasks.filter((x) => taskInTab(x, t.id)).length;
+    return `<button class="tab ${ui.tab === t.id ? "active" : ""}" data-tab="${t.id}">
+              ${esc(t.label)}
+              <span class="tab-count" title="emails · tasks">${emails.length} · ${tasks}</span>
+              ${undecided ? `<span class="tab-warn" title="undecided emails">${undecided}</span>` : ""}
+            </button>`;
+  }).join("");
+  $("tabs").querySelectorAll("[data-tab]").forEach((b) =>
+    b.addEventListener("click", () => { ui.tab = b.dataset.tab; renderReview(); }));
 }
 
 function renderEmailsToolbar() {
@@ -718,9 +861,9 @@ function renderEmailsToolbar() {
     }));
 }
 
-/** Indices of session.emails after the active filter + sort. */
+/** Indices of session.emails after the active tab + filter + sort. */
 function visibleEmailIndices() {
-  let idx = session.emails.map((_, i) => i);
+  let idx = session.emails.map((_, i) => i).filter((i) => emailInTab(session.emails[i], ui.tab));
   if (ui.filter === "Undecided") {
     idx = idx.filter((i) => session.emails[i].decision.isTask === null);
   } else if (ui.filter !== "All") {
@@ -739,9 +882,10 @@ function visibleEmailIndices() {
 
 function renderEmails() {
   const idx = visibleEmailIndices();
-  $("emails-count").textContent = `${idx.length} of ${session.emails.length}`;
+  const inTab = session.emails.filter((e) => emailInTab(e, ui.tab)).length;
+  $("emails-count").textContent = `${idx.length} of ${inTab}`;
   $("emails-list").innerHTML = idx.length === 0
-    ? `<div style="padding:18px;color:var(--muted)">No emails match this filter.</div>`
+    ? `<div style="padding:18px;color:var(--muted)">No emails in this tab${ui.filter !== "All" ? " match this filter" : ""}.</div>`
     : idx.map(emailRowHTML).join("");
 
   // Wire up the row controls (event listeners can't live in innerHTML strings)
@@ -873,10 +1017,12 @@ function onEmailAction(act, i) {
 // ── Existing Notion tasks ─────────────────────────────────────────────
 function renderExistingTasks() {
   const tasks = session.existingTasks;
-  $("tasks-count").textContent = String(tasks.length);
-  $("tasks-list").innerHTML = tasks.length === 0
-    ? `<div style="padding:18px;color:var(--muted)">No open tasks in this session.</div>`
-    : tasks.map((t, i) => {
+  const idx = tasks.map((_, i) => i).filter((i) => taskInTab(tasks[i], ui.tab));
+  $("tasks-count").textContent = String(idx.length);
+  $("tasks-list").innerHTML = idx.length === 0
+    ? `<div style="padding:18px;color:var(--muted)">No open tasks in this tab.</div>`
+    : idx.map((i) => {
+        const t = tasks[i];
         // Show the task with any pending edits layered on top
         const v = { ...t, ...(t.decision.edits || {}) };
         const editedFields = t.decision.edits ? Object.keys(t.decision.edits) : [];
@@ -937,10 +1083,11 @@ function editExistingTask(i) {
 // ── New manual tasks ──────────────────────────────────────────────────
 function renderNewTasks() {
   const tasks = session.newTasks;
-  $("new-count").textContent = String(tasks.length);
-  $("new-list").innerHTML = tasks.length === 0
-    ? `<div style="padding:18px;color:var(--muted)">No new tasks added.</div>`
-    : tasks.map((t, i) => `
+  const idx = tasks.map((_, i) => i).filter((i) => taskInTab(tasks[i], ui.tab));
+  $("new-count").textContent = String(idx.length);
+  $("new-list").innerHTML = idx.length === 0
+    ? `<div style="padding:18px;color:var(--muted)">No new tasks in this tab.</div>`
+    : idx.map((i) => { const t = tasks[i]; return `
         <div class="task-row">
           <div></div>
           <div>
@@ -954,7 +1101,7 @@ function renderNewTasks() {
             <button class="btn btn-small" data-edit-new="${i}">Edit</button>
             <button class="btn btn-small" data-del-new="${i}">Remove</button>
           </div>
-        </div>`).join("");
+        </div>`; }).join("");
 
   $("new-list").querySelectorAll("[data-edit-new]").forEach((btn) =>
     btn.addEventListener("click", () => {
@@ -999,6 +1146,14 @@ function renderConfirmBar() {
   $("btn-show-undecided").classList.toggle("hidden", c.undecided === 0);
 }
 
+/** Switch to the Undecided filter; if the current tab has none, jump to All. */
+function showUndecided() {
+  ui.filter = "Undecided";
+  const inTab = session.emails.some((e) => emailInTab(e, ui.tab) && e.decision.isTask === null);
+  if (!inTab) ui.tab = "all";
+  renderReview();
+}
+
 function acceptAllSuggestions() {
   let n = 0;
   for (const e of session.emails) {
@@ -1022,8 +1177,7 @@ async function confirmSave() {
   const c = counts();
   if (c.undecided > 0) {
     showToast(`${c.undecided} emails still undecided — every email needs a yes/no`);
-    ui.filter = "Undecided";
-    renderReview();
+    showUndecided();
     return;
   }
 
@@ -1170,17 +1324,18 @@ function applyModal() {
 // ── Wire up static buttons & boot ─────────────────────────────────────
 $("btn-open").addEventListener("click", openViaPicker);
 $("btn-open-other").addEventListener("click", openViaPicker);
+$("btn-theme").addEventListener("click", toggleTheme);
 $("btn-reopen").addEventListener("click", reopenStored);
 $("btn-add-task").addEventListener("click", () =>
   openTaskEditor({
     heading: "New task",
     source: null,
-    initial: { title: "", notes: "", group: "Personal", tags: [], dueDate: "" },
+    initial: { title: "", notes: "", group: tabDefaultGroup(ui.tab), tags: [], dueDate: "" },
     onApply(values) { session.newTasks.push(values); renderReview(); },
   }));
 $("btn-accept-all").addEventListener("click", acceptAllSuggestions);
 $("btn-reject-rest").addEventListener("click", rejectRest);
-$("btn-show-undecided").addEventListener("click", () => { ui.filter = "Undecided"; renderReview(); });
+$("btn-show-undecided").addEventListener("click", showUndecided);
 $("btn-confirm").addEventListener("click", confirmSave);
 $("m-cancel").addEventListener("click", closeModal);
 $("m-apply").addEventListener("click", applyModal);
@@ -1191,6 +1346,7 @@ $("modal-overlay").addEventListener("click", (ev) => {
 // Boot: if the stored handle is already granted, load it silently;
 // otherwise the landing screen offers a one-click "Reopen".
 (async function boot() {
+  initTheme();
   render();
   if (!window.showOpenFilePicker) return;
   const stored = await loadStoredHandle();
