@@ -134,41 +134,64 @@
   .screen-card .btn { margin: 6px 4px; }
   .screen-note { font-size: 12.5px; color: var(--muted); margin-top: 18px; }
 
-  /* ── Tabs (Personal / Gabriel & Arina / All) ──────────────────────── */
+  /* ── Tabs (Personal / Gabriel & Arina) — big segmented switcher ───── */
   .tabs {
-    display: flex;
-    gap: 4px;
-    margin-bottom: 18px;
-    border-bottom: 2px solid var(--border);
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    gap: 12px;
+    margin-bottom: 22px;
   }
   .tab {
-    background: none;
-    border: none;
-    border-bottom: 3px solid transparent;
-    margin-bottom: -2px;
-    padding: 10px 18px;
-    font-size: 15px;
-    font-weight: 600;
+    background: var(--card);
+    border: 2px solid var(--border);
+    border-radius: 14px;
+    padding: 16px 22px;
+    font-size: 22px;
+    font-weight: 700;
     color: var(--muted);
+    text-align: left;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    cursor: pointer;
+    transition: border-color .12s, color .12s, box-shadow .12s;
   }
-  .tab:hover { color: var(--text); }
-  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab:hover { color: var(--text); border-color: var(--accent); }
+  .tab.active {
+    color: var(--accent);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent);
+  }
+  .tab.confirmed { border-style: dashed; }
+  .tab.confirmed.active { border-style: solid; }
+  .tab .tab-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
   .tab .tab-count {
     background: var(--chip);
     border-radius: 20px;
-    padding: 1px 8px;
-    font-size: 12px;
-    font-weight: 500;
+    padding: 3px 12px;
+    font-size: 13px;
+    font-weight: 600;
     color: var(--muted);
-    margin-left: 6px;
   }
-  .tab .tab-warn {
-    background: var(--amber-bg);
-    color: var(--amber);
+  .tab .tab-done {
+    background: var(--green-bg);
+    color: var(--green, #16a34a);
     border-radius: 20px;
-    padding: 1px 8px;
-    font-size: 12px;
-    margin-left: 4px;
+    padding: 3px 12px;
+    font-size: 13px;
+    font-weight: 700;
+  }
+  /* A confirmed tab is read-only until the save skill has run */
+  .tab-locked { pointer-events: none; opacity: .55; }
+  .locked-banner {
+    background: var(--green-bg);
+    border: 1px solid var(--green, #16a34a);
+    border-radius: 10px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    font-weight: 600;
   }
 
   /* ── Sections ─────────────────────────────────────────────────────── */
@@ -208,12 +231,11 @@
     color: var(--muted);
   }
   .filter-btn.active { background: var(--text); border-color: var(--text); color: var(--bg); }
-  .filter-btn.f-undecided.active { background: var(--amber); border-color: var(--amber); color: var(--on-dark); }
 
   /* ── Email rows ───────────────────────────────────────────────────── */
   .email-row {
     display: grid;
-    grid-template-columns: 150px minmax(260px, 1fr) 150px 300px 130px;
+    grid-template-columns: 130px minmax(320px, 1fr) 110px 200px;
     gap: 14px;
     padding: 12px 16px;
     border-bottom: 1px solid var(--border);
@@ -221,20 +243,38 @@
     align-items: start;
   }
   .email-row:last-child { border-bottom: none; }
+  /* Category + Action hug the right edge so the description column gets the space */
+  .email-row > :nth-child(3), .email-row > :nth-child(4),
+  .email-head > :nth-child(3), .email-head > :nth-child(4) { justify-self: end; text-align: right; }
+  .email-row > :nth-child(4) { width: 100%; }
+  .email-row .action-detail { text-align: left; }
+  .email-head {
+    display: grid;
+    grid-template-columns: 130px minmax(320px, 1fr) 110px 200px;
+    gap: 14px;
+    padding: 6px 16px 6px 20px;
+    background: var(--subtle);
+    border-bottom: 1px solid var(--border);
+  }
   .email-row.cat-important { background: var(--important-bg); border-left-color: var(--important-border); }
   .email-row.cat-fyi { background: var(--fyi-bg); border-left-color: var(--fyi-border); }
   .email-row.cat-notimportant { background: var(--card); }
-  .email-row.undecided { border-left-color: var(--amber); }
 
   .cell-date { font-size: 12.5px; color: var(--muted); }
   .flag-mark { display: block; margin-top: 4px; font-size: 12px; }
   .subject { font-weight: 600; }
-  .from-line { font-size: 12.5px; margin-top: 2px; }
-  .from-email { color: var(--muted); }
-  .summary { font-size: 12.5px; color: var(--muted); margin-top: 3px; line-height: 1.4; }
+  .from-line { font-size: 12.5px; margin-top: 2px; margin-bottom: 14px; }
+  .from-email { color: var(--muted); margin-left: 4px; }
+  .summary {
+    font-size: 14.5px;
+    color: var(--text);
+    line-height: 1.45;
+    padding: 4px 10px;
+    border-left: 3px solid var(--accent, #4f8cff);
+  }
   .tracked-link {
     display: inline-block;
-    margin-top: 5px;
+    margin-top: 0;
     font-size: 12px;
     background: var(--green-bg);
     color: var(--green);
@@ -272,11 +312,56 @@
   .task-badge.pending { background: var(--amber-bg); color: var(--amber); }
   .task-actions { display: flex; gap: 6px; flex-wrap: wrap; }
   .edited-note { color: var(--amber); font-size: 12px; margin-top: 3px; }
+  .action-detail { margin-top: 6px; font-size: 12.5px; line-height: 1.4; }
+  .task-notes.pre { white-space: pre-line; }
+
+  /* One-click icon radio ribbon (category + action) — icon only, label on hover */
+  .ribbon {
+    display: inline-flex;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--card);
+  }
+  .ribbon button {
+    font: inherit;
+    width: 34px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-right: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 15px;
+    line-height: 1;
+    opacity: .55;
+    transition: background .12s, opacity .12s, color .12s;
+  }
+  .ribbon button svg { display: block; }
+  .ribbon button:last-child { border-right: none; }
+  .ribbon button:hover:not(:disabled):not(.active) { background: var(--hover); opacity: 1; color: var(--text); }
+  .ribbon button.active { background: var(--accent); color: var(--on-dark); opacity: 1; }
+  .ribbon button:disabled { cursor: default; }
+  .ribbon-cap { font-size: 11.5px; color: var(--text); margin-top: 4px; font-weight: 600; }
+
+  /* Friendly diff in the task editor */
+  .diff { font-size: 12.5px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .diff-line { display: grid; grid-template-columns: 18px 1fr; padding: 2px 8px 2px 6px; white-space: pre-wrap; word-break: break-word; }
+  .diff-line .g { color: var(--muted); font-weight: 700; }
+  .diff-line.same { color: var(--muted); }
+  .diff-line.add { background: var(--green-bg); color: var(--green); }
+  .diff-line.del { background: var(--red-bg); color: var(--red); text-decoration: line-through; }
+  .diff-line.marker { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+  .diff-empty { padding: 8px; color: var(--muted); }
+  details.field summary { cursor: pointer; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
 
   /* ── Existing / new task rows ─────────────────────────────────────── */
   .task-row {
     display: grid;
-    grid-template-columns: 34px minmax(240px, 1fr) 140px 190px 100px 170px;
+    grid-template-columns: 110px minmax(240px, 1fr) 140px 190px 100px 170px;
     gap: 12px;
     padding: 11px 16px;
     border-bottom: 1px solid var(--border);
@@ -285,6 +370,7 @@
   }
   .task-row:last-child { border-bottom: none; }
   .task-row.completed { background: var(--green-bg); }
+  .task-row.cancelled { background: var(--chip); opacity: .8; }
   .task-title { font-weight: 600; }
   .task-notes { font-size: 12.5px; color: var(--muted); margin-top: 3px; line-height: 1.4; }
   .tag-chip {
@@ -346,7 +432,7 @@
     background: var(--card);
     color: var(--text);
   }
-  .field textarea { min-height: 74px; resize: vertical; }
+  .field textarea { min-height: 140px; resize: vertical; }
   .tags-grid { display: flex; flex-wrap: wrap; gap: 4px 14px; }
   .tags-grid label { display: flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 400; color: var(--text); }
   .field-hint { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
@@ -458,6 +544,8 @@
   <div id="screen-review" class="hidden">
     <!-- Tab bar: each tab is its own page with emails + tasks for that scope -->
     <div class="tabs" id="tabs"></div>
+    <div class="locked-banner hidden" id="locked-banner"></div>
+    <div id="tab-content">
 
     <!-- Emails -->
     <div class="section">
@@ -472,7 +560,7 @@
     <div class="section">
       <div class="section-header">
         <div class="section-title">Open Notion tasks<span class="badge-count" id="tasks-count"></span></div>
-        <div class="toolbar" style="font-size:12.5px;color:var(--muted)">tick = mark Done on save</div>
+        <div class="toolbar" style="font-size:12.5px;color:var(--muted)">state applies on save · linked emails mirror it</div>
       </div>
       <div id="tasks-list"></div>
     </div>
@@ -487,6 +575,7 @@
       </div>
       <div id="new-list"></div>
     </div>
+    </div><!-- /tab-content -->
   </div>
 </main>
 
@@ -494,9 +583,6 @@
 <div class="confirm-bar hidden" id="confirm-bar">
   <div class="confirm-summary" id="confirm-summary"></div>
   <div class="confirm-actions">
-    <button class="btn btn-small" id="btn-accept-all">Accept all suggestions</button>
-    <button class="btn btn-small" id="btn-reject-rest">Not-a-task for all undecided without suggestion</button>
-    <button class="btn btn-small hidden" id="btn-show-undecided">Show undecided</button>
     <button class="btn btn-primary btn-green" id="btn-confirm">Confirm &amp; Save</button>
   </div>
 </div>
@@ -512,7 +598,12 @@
     <div class="field">
       <label for="m-notes">Notes</label>
       <textarea id="m-notes"></textarea>
+      <div class="field-hint hidden" id="m-notes-hint"></div>
     </div>
+    <details class="field hidden" id="m-diff" open>
+      <summary>What changes vs. Notion</summary>
+      <div id="m-diff-body"></div>
+    </details>
     <div class="field">
       <label for="m-group">Group</label>
       <select id="m-group"></select>
@@ -546,31 +637,87 @@
    Access API. Talks to no servers: pa-email-triage writes the file,
    this page edits the `decision` blocks + newTasks and flips status to
    "reviewed", and pa-email-triage-save applies it afterwards.
+
+   Decision model (per email): `category` → `decision.emailAction`:
+     non-tracked: Not Important → archive (locked); FYI → archive|none;
+                  Important → create-task|create-email|none
+     tracked (existingTaskUrl): update-task | complete-task | cancel-task
+   `decision.isTask` is derived (= emailAction === "create-task").
+   Tracked complete/cancel mirror onto existingTasks[].decision.complete/cancel,
+   and the task description update lands in existingTasks[].decision.edits.notes
+   with Gabriel's text above "-- auto comment --" and Claude's briefing below.
    ══════════════════════════════════════════════════════════════════════ */
 
 // ── Allowed option values (dropdowns only — never free text) ──────────
 const GROUPS = ["Work", "Personal", "Gabriel & Arina", "New Ideas"];
 const TAGS = ["Admin", "Finance", "Health", "Property", "Dev", "Research", "Errand"];
 const CATEGORIES = ["Important", "FYI", "Not Important"];
-const EMAIL_ACTIONS = ["flag", "archive", "none"];
 const SHARED_GROUP = "Gabriel & Arina";
+
+// ── Actions ───────────────────────────────────────────────────────────
+// The category is the one thing Gabriel decides; it drives the Action,
+// which is what pa-email-triage-save will actually do. Non-tracked emails
+// get the list for their category (first entry = default); emails that
+// already have a Notion task get the tracked list instead (no category).
+const ACTIONS_BY_CATEGORY = {
+  "Not Important": ["archive"],                          // locked
+  "FYI":           ["archive", "none"],
+  "Important":     ["create-task", "create-email", "none"],
+};
+// Icons for the one-click ribbons (labels are shown as captions + tooltips)
+// Inline SVG line icons (Lucide-style, 24px grid, currentColor stroke) so they
+// follow the button colour and look consistent across OS emoji fonts.
+const svg = (paths) => `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+const CATEGORY_ICONS = {
+  "Important":     svg('<path d="M12 3l9.5 16.5H2.5z"/><path d="M12 10v4"/><path d="M12 17.5h.01"/>'),
+  "FYI":           svg('<circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><path d="M12 8h.01"/>'),
+  "Not Important": svg('<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>'),
+};
+const ACTION_ICONS = {
+  "archive":       svg('<rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8"/><path d="M10 12h4"/>'),
+  "none":          svg('<circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/>'),
+  "create-task":   svg('<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M12 8v8"/><path d="M8 12h8"/>'),
+  "create-email":  svg('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>'),
+  "update-task":   svg('<path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/>'),
+  "complete-task": svg('<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 12l3 3 5-6"/>'),
+  "cancel-task":   svg('<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 9l6 6"/><path d="M15 9l-6 6"/>'),
+};
+const TRACKED_ACTIONS = ["update-task", "complete-task", "cancel-task"];
+const ACTION_LABELS = {
+  "archive": "Archive", "create-email": "Create email", "create-task": "Create task", "none": "None",
+  "update-task": "Update task", "complete-task": "Complete task", "cancel-task": "Cancel task",
+};
+// Marker separating Gabriel's own task description (above, never touched)
+// from Claude's auto-managed briefing (below). Must stay this exact string.
+const AUTO_MARKER = "-- auto comment --";
 
 // ── Tabs ──────────────────────────────────────────────────────────────
 // personal = Outlook emails + tasks in any group except the shared one
 // shared   = Gmail emails   + tasks in "Gabriel & Arina"
-// all      = everything
-const TABS = [
-  { id: "personal", label: "Personal" },
-  { id: "shared",   label: SHARED_GROUP },
-  { id: "all",      label: "All" },
+// Each tab is confirmed & saved on its own: session.reviewedGroups[tab] holds
+// the confirm timestamp, and session.status flips to "reviewed" only once BOTH
+// tabs are confirmed (pa-email-triage-save keys off status).
+const ALL_TABS = [
+  { id: "personal", label: "Personal",    icon: "👤" },
+  { id: "shared",   label: SHARED_GROUP, icon: "👥" },
 ];
+// URL switch: ?type=gna shows ONLY the Gabriel & Arina tab, ?type=gabriel
+// shows ONLY Personal. Anything else / no parameter shows both tabs.
+// When a tab is hidden, confirming the visible one(s) marks the session
+// "reviewed" and NEUTRALISES the hidden group's decisions (see confirmSave),
+// so pa-email-triage-save never touches the group that wasn't reviewed.
+const URL_TYPE = (new URLSearchParams(location.search).get("type") || "").toLowerCase();
+const TABS = URL_TYPE === "gna"     ? ALL_TABS.filter((t) => t.id === "shared")
+           : URL_TYPE === "gabriel" ? ALL_TABS.filter((t) => t.id === "personal")
+           : ALL_TABS;
 function emailInTab(e, tab) {
-  if (tab === "all") return true;
   return tab === "shared" ? e.source === "gmail" : e.source !== "gmail";
 }
 function taskInTab(t, tab) {
-  if (tab === "all") return true;
   return tab === "shared" ? t.group === SHARED_GROUP : t.group !== SHARED_GROUP;
+}
+function tabConfirmed(tab) {
+  return !!(session && session.reviewedGroups && session.reviewedGroups[tab]);
 }
 /** Default group for a task created from the current tab. */
 function tabDefaultGroup(tab) {
@@ -598,7 +745,7 @@ function toggleTheme() {
 let fileHandle = null;   // FileSystemFileHandle for triage-session.json
 let session = null;      // the ENTIRE parsed JSON — mutated in place so
                          // every field the app doesn't touch is preserved
-let ui = { sortCol: "date", sortDir: "desc", filter: "All", tab: "personal" };
+let ui = { sortCol: "date", sortDir: "desc", filter: "All", tab: TABS[0].id };
 
 // ── Small helpers ─────────────────────────────────────────────────────
 const $ = (id) => document.getElementById(id);
@@ -653,6 +800,40 @@ function allowedGroups(source) {
   if (source === "gmail") return [SHARED_GROUP];
   if (source === "outlook") return GROUPS.filter((g) => g !== SHARED_GROUP);
   return GROUPS; // manual newTasks are unrestricted
+}
+
+/**
+ * One-click icon radio ribbon. `name` becomes the data attribute the row
+ * listeners look for (data-cat / data-action), `i` the email index.
+ * options: [{ value, icon, label }]. locked → single choice, not clickable.
+ */
+function ribbonHTML(name, i, options, current, { locked = false, noCap = false } = {}) {
+  const cur = options.find((o) => o.value === current);
+  return `<div class="ribbon" role="radiogroup">${options.map((o) => `
+    <button type="button" data-${name}="${i}" data-value="${esc(o.value)}"
+            class="${o.value === current ? "active" : ""}" title="${esc(o.label)}"
+            role="radio" aria-checked="${o.value === current}" ${locked ? "disabled" : ""}>${o.icon}</button>`).join("")}</div>
+    ${noCap ? "" : `<div class="ribbon-cap">${esc(cur ? cur.label : "")}${locked ? " 🔒" : ""}</div>`}`;
+}
+
+/** Line-based diff (LCS) → [{ type: "same" | "add" | "del", text }]. Small inputs only. */
+function diffLines(oldText, newText) {
+  const a = String(oldText ?? "").split("\n"), b = String(newText ?? "").split("\n");
+  const n = a.length, m = b.length;
+  const L = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--)
+    for (let j = m - 1; j >= 0; j--)
+      L[i][j] = a[i] === b[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+  const out = [];
+  let i = 0, j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) { out.push({ type: "same", text: a[i] }); i++; j++; }
+    else if (L[i + 1][j] >= L[i][j + 1]) { out.push({ type: "del", text: a[i] }); i++; }
+    else { out.push({ type: "add", text: b[j] }); j++; }
+  }
+  while (i < n) out.push({ type: "del", text: a[i++] });
+  while (j < m) out.push({ type: "add", text: b[j++] });
+  return out;
 }
 
 /** Deep link back to the email, used when creating a task on an email with no suggestion. */
@@ -740,36 +921,140 @@ async function loadFromHandle(handle) {
   applyLoadDefaults();
   storeHandle(handle);
   ui.filter = "All";
-  ui.tab = "personal";
+  ui.tab = TABS[0].id;
+  const firstOpen = TABS.find((t) => !tabConfirmed(t.id));
+  if (firstOpen) ui.tab = firstOpen.id;
   render();
 }
 
-/** Fill in decision defaults for any email the prepare skill left without one. */
+/** Fill in decision defaults / migrate legacy values for everything in the file. */
 function applyLoadDefaults() {
-  for (const e of session.emails) {
-    if (!e.decision) e.decision = { isTask: null, emailAction: null, task: null };
-    if (e.decision.isTask === undefined) e.decision.isTask = null;
-    if (e.decision.task === undefined) e.decision.task = null;
-    if (!e.decision.emailAction) {
-      // Defaults: already tracked → none; suggestion → flag; otherwise → archive
-      e.decision.emailAction = e.existingTaskUrl ? "none" : e.suggestedTask ? "flag" : "archive";
-    }
-  }
   session.existingTasks = session.existingTasks || [];
   for (const t of session.existingTasks) {
-    if (!t.decision) t.decision = { complete: false, edits: null };
+    if (!t.decision) t.decision = { complete: false, cancel: false, edits: null };
+    if (t.decision.cancel === undefined) t.decision.cancel = false;
+    if (t.decision.edits === undefined) t.decision.edits = null;
   }
   session.newTasks = session.newTasks || [];
+
+  for (const e of session.emails) {
+    if (!e.decision) e.decision = { isTask: null, emailAction: null, task: null };
+    const d = e.decision;
+    if (d.task === undefined) d.task = null;
+    if (!CATEGORIES.includes(e.category)) e.category = "FYI";
+
+    const allowed = allowedActions(e);
+    if (!allowed.includes(d.emailAction)) {
+      // Missing or legacy value ("flag" / old isTask yes-no) → derive a sensible one.
+      const t = trackedTask(e);
+      if (t && t.decision.cancel) d.emailAction = "cancel-task";
+      else if (t && t.decision.complete) d.emailAction = "complete-task";
+      else if (!isTracked(e) && d.isTask === true && allowed.includes("create-task")) d.emailAction = "create-task";
+      else d.emailAction = allowed[0];
+    }
+    syncDerived(e);
+  }
 }
 
-// ── Decision mutators ─────────────────────────────────────────────────
-function setIsTask(email, value) {
-  email.decision.isTask = value;
-  if (value !== true) email.decision.task = null;
-  // Rule: a task email can never be archived — auto-switch to flag.
-  if (value === true && email.decision.emailAction === "archive") {
-    email.decision.emailAction = "flag";
+// ── Decision model ────────────────────────────────────────────────────
+function isTracked(e) { return !!e.existingTaskUrl; }
+
+/** The open Notion task this email was matched to (null if it's not in the session). */
+function trackedTask(e) {
+  return isTracked(e) ? (session.existingTasks.find((t) => t.url === e.existingTaskUrl) || null) : null;
+}
+
+/** Emails matched to a given existing task. */
+function emailsForTask(t) {
+  return session.emails.filter((e) => e.existingTaskUrl === t.url);
+}
+
+function allowedActions(e) {
+  return isTracked(e) ? TRACKED_ACTIONS : (ACTIONS_BY_CATEGORY[e.category] || ACTIONS_BY_CATEGORY.FYI);
+}
+
+function setCategory(e, category) {
+  e.category = category;
+  e.decision.emailAction = allowedActions(e)[0]; // category drives the default action
+  syncDerived(e);
+}
+
+function setAction(e, action) {
+  e.decision.emailAction = action;
+  syncDerived(e);
+}
+
+/**
+ * Keep the derived fields consistent with the chosen action:
+ *  - isTask is no longer a manual choice — it's true only for "create-task"
+ *  - complete/cancel on a tracked email is mirrored onto the Notion task row
+ *    (and vice-versa, see setTaskState) so both sections always agree.
+ */
+function syncDerived(e) {
+  const d = e.decision;
+  if (isTracked(e)) {
+    d.isTask = false;
+    d.task = null;
+    const t = trackedTask(e);
+    if (t) {
+      t.decision.complete = d.emailAction === "complete-task";
+      t.decision.cancel = d.emailAction === "cancel-task";
+    }
+  } else {
+    d.isTask = d.emailAction === "create-task";
+    if (!d.isTask) d.task = null;
   }
+}
+
+/** Existing-task state chosen in the tasks section: "open" | "done" | "cancelled". */
+function setTaskState(t, state) {
+  t.decision.complete = state === "done";
+  t.decision.cancel = state === "cancelled";
+  const action = state === "done" ? "complete-task" : state === "cancelled" ? "cancel-task" : "update-task";
+  for (const e of emailsForTask(t)) e.decision.emailAction = action;
+}
+function taskState(t) {
+  return t.decision.complete ? "done" : t.decision.cancel ? "cancelled" : "open";
+}
+
+// ── Task description: Gabriel's part + auto comment ───────────────────
+/** Split a task description at the marker. Above = Gabriel's, below = Claude's. */
+function splitNotes(notes) {
+  const str = String(notes ?? "");
+  const i = str.indexOf(AUTO_MARKER);
+  if (i < 0) return { own: str.trimEnd(), auto: "" };
+  return { own: str.slice(0, i).trimEnd(), auto: str.slice(i + AUTO_MARKER.length).trim() };
+}
+function joinNotes(own, auto) {
+  if (!auto) return own;
+  return `${own}${own ? "\n\n" : ""}${AUTO_MARKER}\n${auto}`;
+}
+function shortDate(iso) {
+  const d = new Date(iso);
+  return isNaN(d) ? "" : `${String(d.getDate()).padStart(2, "0")} ${d.toLocaleString("en-AU", { month: "short" })}`;
+}
+/** One line per matched email — very short, this is a briefing not a recap. */
+function autoCommentFor(t) {
+  return emailsForTask(t)
+    .filter((e) => e.summary)
+    .map((e) => `${shortDate(e.date)}: ${e.summary}`.trim())
+    .join("\n");
+}
+/** What the description should become: Gabriel's part untouched + fresh auto comment. */
+function proposedNotes(t) {
+  return joinNotes(splitNotes(t.notes).own, autoCommentFor(t));
+}
+/** True when saving would change this task's description. */
+function hasPendingAutoComment(t) {
+  return !(t.decision.edits && "notes" in t.decision.edits) && proposedNotes(t) !== String(t.notes ?? "");
+}
+
+/** Task to create for an Important email that has no suggestion and hasn't been edited. */
+function fallbackTask(e) {
+  return { title: e.subject || "(no subject)", notes: e.summary || "", group: allowedGroups(e.source)[0], tags: [], dueDate: "", link: emailDeepLink(e) };
+}
+function effectiveTask(e) {
+  return e.decision.task || e.suggestedTask || fallbackTask(e);
 }
 
 // ── Rendering: pick a screen ──────────────────────────────────────────
@@ -828,24 +1113,36 @@ function renderReview() {
 function renderTabs() {
   $("tabs").innerHTML = TABS.map((t) => {
     const emails = session.emails.filter((e) => emailInTab(e, t.id));
-    const undecided = emails.filter((e) => e.decision.isTask === null).length;
     const tasks = session.existingTasks.filter((x) => taskInTab(x, t.id)).length
                 + session.newTasks.filter((x) => taskInTab(x, t.id)).length;
-    return `<button class="tab ${ui.tab === t.id ? "active" : ""}" data-tab="${t.id}">
-              ${esc(t.label)}
-              <span class="tab-count" title="emails · tasks">${emails.length} · ${tasks}</span>
-              ${undecided ? `<span class="tab-warn" title="undecided emails">${undecided}</span>` : ""}
+    const done = tabConfirmed(t.id);
+    return `<button class="tab ${ui.tab === t.id ? "active" : ""} ${done ? "confirmed" : ""}" data-tab="${t.id}">
+              <span>${t.icon} ${esc(t.label)}</span>
+              <span class="tab-right">
+                ${done ? `<span class="tab-done">✅ Confirmed</span>` : ""}
+                <span class="tab-count" title="emails · tasks">${emails.length} · ${tasks}</span>
+              </span>
             </button>`;
   }).join("");
   $("tabs").querySelectorAll("[data-tab]").forEach((b) =>
     b.addEventListener("click", () => { ui.tab = b.dataset.tab; renderReview(); }));
+
+  // Lock the content of a tab that is already confirmed
+  const done = tabConfirmed(ui.tab);
+  $("tab-content").classList.toggle("tab-locked", done);
+  $("locked-banner").classList.toggle("hidden", !done);
+  if (done) {
+    const label = TABS.find((t) => t.id === ui.tab).label;
+    $("locked-banner").textContent =
+      `✅ ${label} was confirmed at ${formatDate(session.reviewedGroups[ui.tab])} — read-only until pa-email-triage-save has run.`;
+  }
 }
 
 function renderEmailsToolbar() {
-  const filters = ["All", ...CATEGORIES, "Undecided"];
+  const filters = ["All", ...CATEGORIES, "Tracked"];
   $("emails-toolbar").innerHTML =
     filters.map((f) =>
-      `<button class="filter-btn ${f === "Undecided" ? "f-undecided" : ""} ${ui.filter === f ? "active" : ""}"
+      `<button class="filter-btn ${ui.filter === f ? "active" : ""}"
                data-filter="${esc(f)}">${esc(f)}</button>`).join("") +
     `<button class="filter-btn" data-sort="date">Date ${ui.sortCol === "date" ? (ui.sortDir === "asc" ? "↑" : "↓") : "↕"}</button>
      <button class="filter-btn" data-sort="from">From ${ui.sortCol === "from" ? (ui.sortDir === "asc" ? "↑" : "↓") : "↕"}</button>`;
@@ -864,10 +1161,10 @@ function renderEmailsToolbar() {
 /** Indices of session.emails after the active tab + filter + sort. */
 function visibleEmailIndices() {
   let idx = session.emails.map((_, i) => i).filter((i) => emailInTab(session.emails[i], ui.tab));
-  if (ui.filter === "Undecided") {
-    idx = idx.filter((i) => session.emails[i].decision.isTask === null);
+  if (ui.filter === "Tracked") {
+    idx = idx.filter((i) => isTracked(session.emails[i]));
   } else if (ui.filter !== "All") {
-    idx = idx.filter((i) => session.emails[i].category === ui.filter);
+    idx = idx.filter((i) => !isTracked(session.emails[i]) && session.emails[i].category === ui.filter);
   }
   idx.sort((a, b) => {
     const ea = session.emails[a], eb = session.emails[b];
@@ -886,17 +1183,18 @@ function renderEmails() {
   $("emails-count").textContent = `${idx.length} of ${inTab}`;
   $("emails-list").innerHTML = idx.length === 0
     ? `<div style="padding:18px;color:var(--muted)">No emails in this tab${ui.filter !== "All" ? " match this filter" : ""}.</div>`
-    : idx.map(emailRowHTML).join("");
+    : `<div class="email-head"><div class="cell-label" style="margin:0">Date</div><div class="cell-label" style="margin:0">Email</div><div class="cell-label" style="margin:0">Category</div><div class="cell-label" style="margin:0">Action</div></div>`
+      + idx.map(emailRowHTML).join("");
 
   // Wire up the row controls (event listeners can't live in innerHTML strings)
-  $("emails-list").querySelectorAll("[data-cat]").forEach((sel) =>
-    sel.addEventListener("change", () => {
-      session.emails[+sel.dataset.cat].category = sel.value;
+  $("emails-list").querySelectorAll("[data-cat]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      setCategory(session.emails[+btn.dataset.cat], btn.dataset.value);
       renderReview();
     }));
-  $("emails-list").querySelectorAll("[data-action]").forEach((sel) =>
-    sel.addEventListener("change", () => {
-      session.emails[+sel.dataset.action].decision.emailAction = sel.value;
+  $("emails-list").querySelectorAll("[data-action]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      setAction(session.emails[+btn.dataset.action], btn.dataset.value);
       renderReview();
     }));
   $("emails-list").querySelectorAll("[data-act]").forEach((btn) =>
@@ -907,66 +1205,45 @@ function emailRowHTML(i) {
   const e = session.emails[i];
   const d = e.decision;
   const { name, email } = parseFrom(e.from);
-  const undecided = d.isTask === null;
+  const tracked = isTracked(e);
+  const allowed = allowedActions(e);
 
-  // Category dropdown
-  const catSel = `
-    <div class="cell-label">Category</div>
-    <select data-cat="${i}">
-      ${CATEGORIES.map((c) => `<option ${e.category === c ? "selected" : ""}>${esc(c)}</option>`).join("")}
-    </select>`;
+  // Category column — tracked emails don't need one, the task already exists
+  const catCell = tracked
+    ? `<a class="tracked-link" href="${esc(e.existingTaskUrl)}" target="_blank" rel="noopener" title="Open the task in Notion">✓ Tracked</a>`
+    : `${ribbonHTML("cat", i, CATEGORIES.map((c) => ({ value: c, icon: CATEGORY_ICONS[c], label: c })), e.category)}`;
 
-  // Email action dropdown — archive is forbidden while the email is a task
-  const actSel = `
-    <div class="cell-label">Email action</div>
-    <select data-action="${i}">
-      ${EMAIL_ACTIONS.map((a) =>
-        `<option value="${a}" ${d.emailAction === a ? "selected" : ""}
-                 ${a === "archive" && d.isTask === true ? "disabled" : ""}>${a}</option>`).join("")}
-    </select>`;
+  // Action column — what pa-email-triage-save will do with this email
+  const actSel = ribbonHTML("action", i,
+    allowed.map((a) => ({ value: a, icon: ACTION_ICONS[a], label: ACTION_LABELS[a] })),
+    d.emailAction, { locked: allowed.length === 1, noCap: tracked });
 
-  // Task decision block
-  let taskBlock;
-  const effectiveTask = d.task || e.suggestedTask;
-  if (d.isTask === true) {
-    taskBlock = `
-      <span class="task-badge yes">✓ Task</span>
-      <div class="sugg-title">${esc(effectiveTask ? effectiveTask.title : "(no task details)")}</div>
-      ${d.task ? `<div class="edited-note">edited copy will be used</div>` : ""}
-      <div class="task-actions" style="margin-top:6px">
-        <button class="btn btn-small" data-act="edit" data-i="${i}">Edit</button>
-        <button class="btn btn-small" data-act="undo" data-i="${i}">Undo</button>
+  let detail = "";
+  if (tracked) {
+    const t = trackedTask(e);
+    // No task title here — the "Tracked" link already points at it; just the edit button.
+    detail = `
+      <div class="action-detail">
+        ${t ? `<div class="task-actions"><button class="btn btn-small" data-act="edit-tracked" data-i="${i}">Open &amp; edit task</button></div>`
+            : `<a class="tracked-link" href="${esc(e.existingTaskUrl)}" target="_blank" rel="noopener">open task in Notion</a>`}
       </div>`;
-  } else if (d.isTask === false) {
-    taskBlock = `
-      <span class="task-badge no">Not a task</span>
-      <div class="task-actions" style="margin-top:6px">
-        <button class="btn btn-small" data-act="undo" data-i="${i}">Undo</button>
-      </div>`;
-  } else if (e.suggestedTask) {
-    const s = e.suggestedTask;
-    taskBlock = `
-      <span class="task-badge pending">Suggested task</span>
-      <div class="sugg-title">${esc(s.title)}</div>
-      <div class="sugg-meta">
-        ${esc(s.group)} · ${(s.tags || []).map(esc).join(", ") || "no tags"} · due ${esc(s.dueDate || "—")}
-      </div>
-      <div class="task-actions">
-        <button class="btn btn-small btn-green" data-act="accept" data-i="${i}">Accept</button>
-        <button class="btn btn-small" data-act="edit" data-i="${i}">Edit &amp; accept</button>
-        <button class="btn btn-small" data-act="reject" data-i="${i}">Reject</button>
-      </div>`;
-  } else {
-    taskBlock = `
-      <span class="task-badge pending">Undecided</span>
-      <div class="task-actions" style="margin-top:6px">
-        <button class="btn btn-small" data-act="edit" data-i="${i}">Make task…</button>
-        <button class="btn btn-small" data-act="reject" data-i="${i}">Not a task</button>
+  } else if (d.emailAction === "create-task") {
+    const t = effectiveTask(e);
+    detail = `
+      <div class="action-detail">
+        <div class="sugg-title">${esc(t.title)}</div>
+        <div class="sugg-meta">${esc(t.group)} · ${(t.tags || []).map(esc).join(", ") || "no tags"} · due ${esc(t.dueDate || "—")}</div>
+        ${d.task ? `<div class="edited-note">edited copy will be used</div>`
+          : !e.suggestedTask ? `<div class="edited-note">no suggestion — built from subject &amp; summary</div>` : ""}
+        <div class="task-actions">
+          <button class="btn btn-small" data-act="edit" data-i="${i}">Edit task</button>
+          ${d.task ? `<button class="btn btn-small" data-act="reset" data-i="${i}">Reset</button>` : ""}
+        </div>
       </div>`;
   }
 
   return `
-    <div class="email-row ${getCatClass(e.category)} ${undecided ? "undecided" : ""}">
+    <div class="email-row ${tracked ? "cat-fyi" : getCatClass(e.category)}">
       <div class="cell-date">
         ${formatDate(e.date)}
         ${e.isFlagged ? `<span class="flag-mark">🚩 flagged</span>` : ""}
@@ -976,41 +1253,32 @@ function emailRowHTML(i) {
         <div class="subject">${esc(e.subject)}</div>
         <div class="from-line">${esc(name)} ${email ? `<span class="from-email">&lt;${esc(email)}&gt;</span>` : ""}</div>
         <div class="summary">${esc(e.summary)}</div>
-        ${e.existingTaskUrl ? `<a class="tracked-link" href="${esc(e.existingTaskUrl)}" target="_blank" rel="noopener">✓ already tracked in Notion</a>` : ""}
       </div>
-      <div>${catSel}</div>
-      <div class="task-block"><div class="cell-label">Task decision</div>${taskBlock}</div>
-      <div>${actSel}</div>
+      <div>${catCell}</div>
+      <div class="task-block">${actSel}${detail}</div>
     </div>`;
 }
 
 function onEmailAction(act, i) {
   const e = session.emails[i];
-  if (act === "accept") {
-    // Accepted unedited: decision.task stays null so the save skill
-    // falls back to suggestedTask (per the schema contract).
-    setIsTask(e, true);
-    renderReview();
-  } else if (act === "reject") {
-    setIsTask(e, false);
-    renderReview();
-  } else if (act === "undo") {
-    e.decision.isTask = null;
-    e.decision.task = null;
+  if (act === "reset") {
+    e.decision.task = null; // back to the suggestion (or the subject/summary fallback)
     renderReview();
   } else if (act === "edit") {
     openTaskEditor({
       heading: e.suggestedTask || e.decision.task ? "Edit task" : "Create task from email",
       source: e.source, // group hard rule applies to email-derived tasks
-      initial: e.decision.task || e.suggestedTask || { title: "", notes: "", group: allowedGroups(e.source)[0], tags: [], dueDate: "", link: "" },
+      initial: effectiveTask(e),
       onApply(values) {
         // The edited copy goes into decision.task — link is preserved
         // (never hand-edited) and generated for inline-created tasks.
         e.decision.task = { ...values, link: (e.decision.task && e.decision.task.link) || (e.suggestedTask && e.suggestedTask.link) || emailDeepLink(e) };
-        setIsTask(e, true);
         renderReview();
       },
     });
+  } else if (act === "edit-tracked") {
+    const idx = session.existingTasks.findIndex((t) => t.url === e.existingTaskUrl);
+    if (idx >= 0) editExistingTask(idx);
   }
 }
 
@@ -1026,13 +1294,22 @@ function renderExistingTasks() {
         // Show the task with any pending edits layered on top
         const v = { ...t, ...(t.decision.edits || {}) };
         const editedFields = t.decision.edits ? Object.keys(t.decision.edits) : [];
+        const linked = emailsForTask(t).length;
+        const state = taskState(t);
         return `
-          <div class="task-row ${t.decision.complete ? "completed" : ""}">
-            <div><input type="checkbox" data-complete="${i}" ${t.decision.complete ? "checked" : ""} title="Mark Done on save"></div>
+          <div class="task-row ${state === "done" ? "completed" : state === "cancelled" ? "cancelled" : ""}">
+            <div>
+              <select data-state="${i}" title="Applied on save">
+                <option value="open" ${state === "open" ? "selected" : ""}>Open</option>
+                <option value="done" ${state === "done" ? "selected" : ""}>Done</option>
+                <option value="cancelled" ${state === "cancelled" ? "selected" : ""}>Cancelled</option>
+              </select>
+            </div>
             <div>
               <div class="task-title"><a href="${esc(t.url)}" target="_blank" rel="noopener">${esc(v.title)}</a></div>
-              ${v.notes ? `<div class="task-notes">${esc(v.notes)}</div>` : ""}
+              ${v.notes ? `<div class="task-notes pre">${esc(v.notes)}</div>` : ""}
               ${editedFields.length ? `<div class="edited-note">edited: ${editedFields.map(esc).join(", ")}</div>` : ""}
+              ${hasPendingAutoComment(t) ? `<div class="edited-note">auto comment will be refreshed from ${linked} email${linked === 1 ? "" : "s"}</div>` : ""}
             </div>
             <div>${esc(v.group || "—")}<div class="task-notes">${esc(t.status || "")}</div></div>
             <div>${(v.tags || []).map((tg) => `<span class="tag-chip">${esc(tg)}</span>`).join("") || "—"}</div>
@@ -1044,9 +1321,9 @@ function renderExistingTasks() {
           </div>`;
       }).join("");
 
-  $("tasks-list").querySelectorAll("[data-complete]").forEach((cb) =>
-    cb.addEventListener("change", () => {
-      session.existingTasks[+cb.dataset.complete].decision.complete = cb.checked;
+  $("tasks-list").querySelectorAll("[data-state]").forEach((sel) =>
+    sel.addEventListener("change", () => {
+      setTaskState(session.existingTasks[+sel.dataset.state], sel.value);
       renderReview();
     }));
   $("tasks-list").querySelectorAll("[data-edit-task]").forEach((btn) =>
@@ -1058,13 +1335,22 @@ function renderExistingTasks() {
     }));
 }
 
+/**
+ * Open the WHOLE task (title + full description) for editing. The
+ * description is pre-filled with Gabriel's part untouched plus a fresh
+ * "-- auto comment --" section; whatever is in the editor on Apply is what
+ * the save skill pushes to Notion.
+ */
 function editExistingTask(i) {
   const t = session.existingTasks[i];
   const current = { ...t, ...(t.decision.edits || {}) };
+  const notes = t.decision.edits && "notes" in t.decision.edits ? current.notes : proposedNotes(t);
   openTaskEditor({
     heading: "Edit Notion task",
     source: null, // existing tasks aren't re-restricted by mailbox — edit freely
-    initial: { title: current.title, notes: current.notes || "", group: current.group, tags: current.tags || [], dueDate: current.dueDate || "" },
+    notesHint: `Everything above "${AUTO_MARKER}" is yours. Below it is Claude's briefing — feel free to tweak it.`,
+    original: { title: t.title, notes: t.notes || "" },
+    initial: { title: current.title, notes: notes || "", group: current.group, tags: current.tags || [], dueDate: current.dueDate || "" },
     onApply(values) {
       // Only CHANGED fields (vs the original Notion values) go into decision.edits.
       const edits = {};
@@ -1122,72 +1408,79 @@ function renderNewTasks() {
 }
 
 // ── Confirm bar ───────────────────────────────────────────────────────
-function counts() {
-  const emails = session.emails;
+/** Counts for the CURRENT tab only — the confirm bar is per group. */
+function counts(tab = ui.tab) {
+  const emails = session.emails.filter((e) => emailInTab(e, tab));
+  const existing = session.existingTasks.filter((t) => taskInTab(t, tab));
+  const by = (a) => emails.filter((e) => e.decision.emailAction === a).length;
   return {
-    accepted: emails.filter((e) => e.decision.isTask === true).length,
-    rejected: emails.filter((e) => e.decision.isTask === false).length,
-    undecided: emails.filter((e) => e.decision.isTask === null).length,
-    completions: session.existingTasks.filter((t) => t.decision.complete).length,
-    edits: session.existingTasks.filter((t) => t.decision.edits).length,
-    newTasks: session.newTasks.length,
+    createTasks: by("create-task"),
+    createEmails: by("create-email"),
+    archives: by("archive") + by("complete-task") + by("cancel-task"),
+    updates: by("update-task"),
+    completions: existing.filter((t) => t.decision.complete).length,
+    cancels: existing.filter((t) => t.decision.cancel).length,
+    edits: existing.filter((t) => t.decision.edits || hasPendingAutoComment(t)).length,
+    newTasks: session.newTasks.filter((t) => taskInTab(t, tab)).length,
   };
 }
 
 function renderConfirmBar() {
   const c = counts();
+  const tab = TABS.find((t) => t.id === ui.tab);
+  const done = tabConfirmed(ui.tab);
   $("confirm-summary").innerHTML =
-    `<b>${c.accepted}</b> tasks accepted · <b>${c.rejected}</b> not-a-task · ` +
-    (c.undecided > 0 ? `<span class="warn">${c.undecided} undecided</span> · ` : "") +
-    `<b>${c.completions}</b> to complete · <b>${c.edits}</b> edited · <b>${c.newTasks}</b> new`;
-  $("btn-confirm").disabled = c.undecided > 0;
-  $("btn-confirm").textContent = c.undecided > 0
-    ? `Confirm & Save (${c.undecided} undecided)` : "Confirm & Save";
-  $("btn-show-undecided").classList.toggle("hidden", c.undecided === 0);
-}
-
-/** Switch to the Undecided filter; if the current tab has none, jump to All. */
-function showUndecided() {
-  ui.filter = "Undecided";
-  const inTab = session.emails.some((e) => emailInTab(e, ui.tab) && e.decision.isTask === null);
-  if (!inTab) ui.tab = "all";
-  renderReview();
-}
-
-function acceptAllSuggestions() {
-  let n = 0;
-  for (const e of session.emails) {
-    if (e.suggestedTask && e.decision.isTask === null) { setIsTask(e, true); n++; }
-  }
-  showToast(n ? `Accepted ${n} suggestion${n === 1 ? "" : "s"}` : "No undecided suggestions");
-  renderReview();
-}
-
-function rejectRest() {
-  let n = 0;
-  for (const e of session.emails) {
-    if (!e.suggestedTask && e.decision.isTask === null) { setIsTask(e, false); n++; }
-  }
-  showToast(n ? `Marked ${n} email${n === 1 ? "" : "s"} as not-a-task` : "Nothing to mark");
-  renderReview();
+    `<span style="font-weight:700;color:var(--text)">${tab.icon} ${esc(tab.label)}</span> · ` +
+    `<b>${c.createTasks}</b> tasks to create · <b>${c.createEmails}</b> drafts · <b>${c.archives}</b> to archive · ` +
+    `<b>${c.updates}</b> task updates · <b>${c.completions}</b> done · <b>${c.cancels}</b> cancelled · ` +
+    `<b>${c.edits}</b> edited · <b>${c.newTasks}</b> new`;
+  const btn = $("btn-confirm");
+  btn.disabled = done;
+  btn.textContent = done ? `✅ ${tab.label} confirmed` : `Confirm & Save — ${tab.label}`;
 }
 
 // ── Confirm & Save ────────────────────────────────────────────────────
-async function confirmSave() {
-  const c = counts();
-  if (c.undecided > 0) {
-    showToast(`${c.undecided} emails still undecided — every email needs a yes/no`);
-    showUndecided();
-    return;
-  }
-
-  // Defensive re-check of the group hard rule before anything is written.
+/** Make every derived decision explicit in the file so the save skill needs no guessing. */
+function materializeDecisions() {
   for (const e of session.emails) {
-    if (e.decision.task) {
-      const ok = allowedGroups(e.source);
-      if (!ok.includes(e.decision.task.group)) e.decision.task.group = ok[0];
+    syncDerived(e);
+    if (e.decision.emailAction === "create-task") {
+      // Group hard rule + guarantee there is always a task object to create.
+      if (!e.decision.task && !e.suggestedTask) e.decision.task = fallbackTask(e);
+      if (e.decision.task) {
+        const ok = allowedGroups(e.source);
+        if (!ok.includes(e.decision.task.group)) e.decision.task.group = ok[0];
+      }
     }
   }
+  for (const t of session.existingTasks) {
+    // Pending auto comment → becomes an explicit description edit (Gabriel's part untouched).
+    if (hasPendingAutoComment(t)) t.decision.edits = { ...(t.decision.edits || {}), notes: proposedNotes(t) };
+  }
+}
+
+/** Strip every actionable decision for a group that was NOT reviewed:
+ *  emails → action "none", existing tasks → untouched, new tasks → dropped. */
+function neutraliseGroup(tab) {
+  for (const e of session.emails) {
+    if (!emailInTab(e, tab)) continue;
+    e.decision.emailAction = "none";
+    e.decision.isTask = false;
+    e.decision.task = null;
+  }
+  for (const t of session.existingTasks) {
+    if (!taskInTab(t, tab)) continue;
+    t.decision.complete = false;
+    t.decision.cancel = false;
+    t.decision.edits = null;
+  }
+  session.newTasks = session.newTasks.filter((t) => !taskInTab(t, tab));
+}
+
+async function confirmSave() {
+  const tab = ui.tab;
+  if (tabConfirmed(tab)) return;
+  materializeDecisions();
 
   try {
     // Stale-tab guard: only save over a file that is still pending-review,
@@ -1198,15 +1491,34 @@ async function confirmSave() {
       return;
     }
 
-    session.status = "reviewed";
+    // Per-group confirm: stamp this tab; the whole session is "reviewed"
+    // only once every tab has been confirmed.
+    session.reviewedGroups = { ...(onDisk.reviewedGroups || {}), ...(session.reviewedGroups || {}), [tab]: new Date().toISOString() };
+    // "reviewed" once every VISIBLE tab is confirmed. Groups hidden by
+    // ?type=… are neutralised so the save skill performs no action on them.
+    const allDone = TABS.every((t) => tabConfirmed(t.id));
+    if (allDone) {
+      const hidden = ALL_TABS.filter((t) => !TABS.includes(t) && !tabConfirmed(t.id));
+      for (const t of hidden) neutraliseGroup(t.id);
+      session.skippedGroups = hidden.map((t) => t.id);
+      session.status = "reviewed";
+    }
     // Never set processedAt or outcome fields — those belong to pa-email-triage-save.
     const writable = await fileHandle.createWritable();
     await writable.write(JSON.stringify(session, null, 2));
     await writable.close();
-    showToast("Saved — session marked as reviewed");
+    const label = TABS.find((t) => t.id === tab).label;
+    showToast(allDone ? "Saved — session marked as reviewed"
+                      : `Saved — ${label} confirmed`);
+    if (!allDone) {
+      // Jump to the other, still-open tab
+      const next = TABS.find((t) => !tabConfirmed(t.id));
+      if (next) ui.tab = next.id;
+    }
     render();
   } catch (err) {
     session.status = "pending-review"; // roll back so the UI stays editable
+    if (session.reviewedGroups) delete session.reviewedGroups[tab];
     showToast("Save failed — " + err.message);
   }
 }
@@ -1235,13 +1547,13 @@ function renderProcessed() {
 
   const emailRows = session.emails.map((e) => {
     const d = e.decision || {};
-    const fallback = d.isTask === true ? `task · ${d.emailAction || "none"}` : (d.emailAction || "none");
+    const fallback = ACTION_LABELS[d.emailAction] || d.emailAction || "none";
     return `<div class="outcome-row"><div>${esc(e.subject)}</div><div>${outcomeBadge(outcomeOf(e), fallback)}</div></div>`;
   }).join("");
 
   const taskRows = (session.existingTasks || []).map((t) => {
     const d = t.decision || {};
-    const fallback = d.complete ? "completed" : d.edits ? "edited" : "untouched";
+    const fallback = d.complete ? "completed" : d.cancel ? "cancelled" : d.edits ? "edited" : "untouched";
     return `<div class="outcome-row"><div>${esc(t.title)}</div><div>${outcomeBadge(outcomeOf(t), fallback)}</div></div>`;
   }).join("");
 
@@ -1266,11 +1578,18 @@ function renderProcessed() {
 // ── Task editor modal ─────────────────────────────────────────────────
 let modalOnApply = null;
 
-function openTaskEditor({ heading, source, initial, onApply }) {
+let modalOriginal = null; // { title, notes } as currently in Notion → drives the live diff
+
+function openTaskEditor({ heading, source, initial, onApply, notesHint, original }) {
   modalOnApply = onApply;
+  modalOriginal = original || null;
   $("modal-title").textContent = heading;
   $("m-title").value = initial.title || "";
   $("m-notes").value = initial.notes || "";
+  $("m-notes-hint").textContent = notesHint || "";
+  $("m-notes-hint").classList.toggle("hidden", !notesHint);
+  $("m-diff").classList.toggle("hidden", !modalOriginal);
+  renderModalDiff();
   $("m-due").value = initial.dueDate || "";
   $("m-error").classList.add("hidden");
 
@@ -1300,6 +1619,33 @@ function openTaskEditor({ heading, source, initial, onApply }) {
 function closeModal() {
   $("modal-overlay").classList.add("hidden");
   modalOnApply = null;
+  modalOriginal = null;
+}
+
+/** Friendly "what changes vs. Notion" view — re-rendered live while typing. */
+function renderModalDiff() {
+  if (!modalOriginal) return;
+  const title = $("m-title").value.trim();
+  const notes = $("m-notes").value;
+  const rows = [];
+  if (title !== (modalOriginal.title || "")) {
+    rows.push(`<div class="diff-line del"><span class="g">−</span><span>${esc(modalOriginal.title)}</span></div>`);
+    rows.push(`<div class="diff-line add"><span class="g">+</span><span>${esc(title)}</span></div>`);
+  }
+  const lines = diffLines(modalOriginal.notes || "", notes);
+  if (lines.some((l) => l.type !== "same")) {
+    for (const l of lines) {
+      if (l.text.trim() === AUTO_MARKER) {
+        rows.push(`<div class="diff-line marker ${l.type}"><span class="g"></span><span>${esc(l.text)}</span></div>`);
+      } else {
+        const g = l.type === "add" ? "+" : l.type === "del" ? "−" : "";
+        rows.push(`<div class="diff-line ${l.type}"><span class="g">${g}</span><span>${esc(l.text) || "&nbsp;"}</span></div>`);
+      }
+    }
+  }
+  $("m-diff-body").innerHTML = rows.length
+    ? `<div class="diff">${rows.join("")}</div>`
+    : `<div class="diff diff-empty">No changes yet — Notion stays as it is.</div>`;
 }
 
 function applyModal() {
@@ -1333,12 +1679,11 @@ $("btn-add-task").addEventListener("click", () =>
     initial: { title: "", notes: "", group: tabDefaultGroup(ui.tab), tags: [], dueDate: "" },
     onApply(values) { session.newTasks.push(values); renderReview(); },
   }));
-$("btn-accept-all").addEventListener("click", acceptAllSuggestions);
-$("btn-reject-rest").addEventListener("click", rejectRest);
-$("btn-show-undecided").addEventListener("click", showUndecided);
 $("btn-confirm").addEventListener("click", confirmSave);
 $("m-cancel").addEventListener("click", closeModal);
 $("m-apply").addEventListener("click", applyModal);
+$("m-title").addEventListener("input", renderModalDiff);
+$("m-notes").addEventListener("input", renderModalDiff);
 $("modal-overlay").addEventListener("click", (ev) => {
   if (ev.target === $("modal-overlay")) closeModal();
 });

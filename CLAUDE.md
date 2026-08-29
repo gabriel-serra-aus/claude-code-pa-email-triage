@@ -2,71 +2,47 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## ⚠️ Current app: `triage-review.html` (static, Aug 2026)
+## What this repo is
 
-The Next.js app below is **superseded** by the standalone static page `triage-review.html` at the repo root. It is developed here, then copied by Gabriel into the workspace folder `D:\Gabriel\OneDrive\Claude\Workspace\Personal Assistance\email-triage\` next to the file it edits.
+A single static page, `triage-review.html`, that is step 2 of a three-step email-triage loop. There is no build, no server, no dependencies, no test suite — edit the HTML, push to `master`, and GitHub Pages serves it.
 
-New workflow (three steps, all decisions live in ONE file):
+- **Live URL:** `https://gabriel-serra-aus.github.io/claude-code-pa-email-triage/triage-review.html` (may move; nothing in the page depends on its own URL)
+- `?type=gabriel` → shows only the Personal tab; `?type=gna` → only the "Gabriel & Arina" tab; no parameter → both.
 
-1. **pa-email-triage** (Cowork skill) — fetches Outlook + shared Gmail + open Notion tasks, classifies, and writes `email-triage\triage-session.json` (`status: "pending-review"`).
-2. **triage-review.html** — opened in Edge/Chrome; reads and writes that same file via the File System Access API (no server, no APIs, no Gmail/Outlook/Notion calls). Gabriel accepts/rejects/edits task suggestions, sets email actions, completes/edits existing tasks, adds new ones; Confirm flips `status` to `"reviewed"`.
-3. **pa-email-triage-save** (Cowork skill) — applies the reviewed file to Notion + the mailboxes and stamps `status: "processed"`.
+The old Next.js app (Apr–Aug 2026) and the local `localhost:8765` server scripts were deleted on 29 Aug 2026; they live in git history only.
 
-Rules the page enforces: gmail-sourced tasks are locked to Group "Gabriel & Arina" and outlook-sourced tasks can never have it; an email with `isTask: true` can't have `emailAction: "archive"`; Confirm is blocked until every email's `decision.isTask` is explicitly true/false. It never writes `processedAt` or outcome fields (those belong to the save skill) and preserves all fields it doesn't touch.
+## The three-step loop (all decisions live in ONE file)
 
-The Next.js app (everything below) is kept **dormant** — it still reads the retired `email-source/*.json` flow and executes actions directly, but is no longer used.
+1. **pa-email-triage** (Cowork skill) — fetches Outlook + shared Gmail + open Notion tasks, classifies, and writes `D:\Gabriel\OneDrive\Claude\Workspace\Personal Assistance\email-triage\triage-session.json` with `status: "pending-review"`.
+2. **triage-review.html** — opened in Edge/Chrome from the GitHub Pages URL; reads and writes that same file via the File System Access API (no APIs, no Gmail/Outlook/Notion calls; the file handle is remembered per browser origin in IndexedDB). Gabriel accepts/rejects/edits task suggestions, sets email actions, completes/edits existing tasks, adds new ones; Confirm flips `status` to `"reviewed"`.
+3. **pa-email-triage-save** (Cowork skill) — applies the reviewed file to Notion + the mailboxes and stamps `status: "processed"` (or `"processed-with-errors"`). The page then shows a read-only outcome summary.
 
-## Commands
+## Decision model the page enforces
 
-```bash
-npm run dev     # Next.js dev server at http://localhost:3000
-npm run build   # production build
-npm start       # run production build
-```
+The **category** is the one thing Gabriel decides and it drives the **action** (`decision.emailAction`), which is exactly what the save skill will do. Category and action are one-click icon ribbons (`ribbonHTML`), not dropdowns.
 
-No test suite, linter, or typecheck is configured.
+- Non-tracked emails: Not Important → `archive` (locked); FYI → `archive` (default) | `none`; Important → `create-task` (default) | `create-email` | `none`.
+- Emails with `existingTaskUrl` ("tracked") show no category and get only `update-task` (default) | `complete-task` | `cancel-task`. Complete/cancel also archive the email and are mirrored onto `existingTasks[].decision.complete` / `.cancel` (and back via the Open/Done/Cancelled select in the tasks section).
+- `decision.isTask` is derived (`emailAction === "create-task"`). An Important email without a suggestion gets a task built from subject + summary on Confirm (`fallbackTask`).
+- Task description updates go into `existingTasks[].decision.edits.notes`: everything above the literal marker `-- auto comment --` is Gabriel's and never touched; everything below is Claude's one-or-two-line briefing (one `DD Mon: summary` line per matched email), replaced on each run.
+- Gmail-sourced tasks are locked to group "Gabriel & Arina"; Outlook-sourced tasks can never have it.
+- There is no "undecided" state — Confirm is always available.
 
-## Architecture
+## Tabs and per-group Confirm
 
-Next.js 15 App Router + React 19. Single-page triage UI (`components/EmailTriage.js`) backed by two API routes under `app/api/`. The app is a bridge between an **external workspace folder** (email input) and the Gmail/Outlook mail backends (action output).
+Two tabs: **Personal** (Outlook emails + tasks in any group except the shared one) and **Gabriel & Arina** (Gmail emails + tasks in that group). The sticky bar shows counts for the current tab; **Confirm & Save — <tab>** stamps `reviewedGroups.<personal|shared>` with an ISO timestamp, writes the whole file, and locks that tab read-only.
 
-The old file-based action handoff (`/api/save-actions`, `/api/actions/*`, the `*-actions.json` files, and the Cowork `pa-action-emails` skill) was retired in Aug 2026 — the app now executes actions itself.
+`status` becomes `"reviewed"` once every *visible* tab is confirmed. When a tab is hidden by `?type=…`, the hidden group is **neutralised** before the write — its emails get `emailAction: "none"`, its existing tasks get `complete/cancel: false, edits: null`, its new tasks are removed — and it is listed in `skippedGroups`. So the save skill keys off `status` alone and never acts on a group that wasn't reviewed.
 
-### External workspace (hardcoded absolute path)
+## File contract rules
 
-One Windows path is hardcoded into `app/api/emails/route.js` and must exist:
+- The page never writes `processedAt` or per-item outcome fields — those belong to the save skill — and preserves every field it doesn't touch (the whole JSON is mutated in place and written back).
+- Stale-tab guard: Confirm re-reads the file and refuses to write if it is no longer `pending-review`.
+- `applyLoadDefaults()` migrates legacy values (old `flag`/`isTask` yes-no) so older session files still load.
+- The save skill must understand the action vocabulary above (`archive | none | create-task | create-email | update-task | complete-task | cancel-task`).
 
-- `D:\Gabriel\OneDrive\Claude\Workspace\Personal Assistance\email-source\` — input: `gmail-emails.json`, `outlook-emails.json` (produced by the fetch skill `pa-email-triage-retrieve`)
+## Working on the page
 
-If you change it, update the `EMAIL_SOURCE` constant in that route file.
-
-### API routes
-
-| Route | Purpose |
-|---|---|
-| `GET  /api/emails` | Reads both source JSON files, returns `{gmail, outlook, gmailModified, outlookModified}`. Missing file → empty array (not an error). |
-| `POST /api/execute-actions` | **Executes triage directly against Gmail/Outlook** using the payload in the request body. |
-
-### execute-actions: direct backend calls
-
-`app/api/execute-actions/route.js` is the non-obvious part. Instead of calling MCP servers, it reuses their OAuth token files directly to talk to Gmail/Graph APIs:
-
-- **Gmail** — loads `credentials.json` + `token.json` from `C:\Users\gabri\Documents\Claude Code\mcp-server\gmail-emails\` via `googleapis`. Auto-persists refreshed tokens back to `token.json`. **Currently disabled** via the `GMAIL_EXECUTION_ENABLED = false` flag at the top of the route (temporary, owner plans to re-enable) — while false, gmail payloads are reported as skipped and no Gmail API call is made.
-- **Outlook** — loads `token_cache.json` from `C:\Users\gabri\Documents\Claude Code\mcp-server\outlook-mcp\` via `@azure/msal-node` silent token refresh, then calls Microsoft Graph via `axios`. Azure client ID is hardcoded.
-
-Triage action semantics (`action.triage` values): `"archive" | "important" | "do-nothing"`.
-
-- Gmail archive → add `OLD` label + remove `INBOX`. Gmail important → add `STARRED`.
-- Outlook archive → move to the built-in Archive folder via Graph's well-known `"archive"` destination (no hardcoded folder ID — the mailbox has two folders named "OLD", which made the old hardcoded-ID approach confusing). Outlook important → set `flag.flagStatus = "flagged"`.
-
-If either MCP server's token file is missing, the route reports a per-provider error rather than crashing — the other provider still processes.
-
-**Stale-ID gotcha:** Outlook message IDs change when a message moves folders, so executing actions invalidates the IDs in the source JSON. A second execute from the same snapshot fails with `ErrorItemNotFound` ("The specified object was not found in the store"). The fetch skill must re-run after every execute.
-
-### Data shapes
-
-Source email objects and the execute payload are documented in `README.md`. The source files are the contract between this app and the external fetch skill (`pa-email-triage-retrieve`, which fetches + classifies).
-
-## User context
-
-Owner is new to Next.js. Existing route files use heavy explanatory comments about App Router conventions (`route.js` → URL mapping, `Response.json()` vs Express patterns, etc.) — match that style when adding new routes or modifying existing ones.
+- One file, vanilla JS, CSS variables for light/dark (`--accent`, `--green`, `--muted`, etc. are defined in both `:root` and the dark block — define new colours in both).
+- Quick syntax check after edits: extract the `<script>` body and run `node --check` on it.
+- `improvements.md` is the log of the Aug 2026 UI rework; add to it when making a deliberate UX change.
