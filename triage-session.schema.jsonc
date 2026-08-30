@@ -44,15 +44,26 @@
 //  emailAction (tracked email, i.e. existingTaskUrl set — no category):
 //                             "update-task" (default) | "complete-task" | "cancel-task"
 //
-//  What each emailAction means for step 3:
+//  What each emailAction means for step 3 — the action decides INBOX vs ARCHIVE only:
 //     "archive"        archive the email                                   (leaves inbox)
-//     "flag"           flag (Outlook) / star (Gmail); email stays in inbox
-//     "create-task"    create Notion task from  decision.task ?? suggestedTask ; flag the email
-//     "update-task"    apply existingTasks[].decision.edits of the matched task; flag the email
+//     "flag"           keep the email in the inbox (page label: "Keep in inbox")
+//     "create-task"    create Notion task from  decision.task ?? suggestedTask ; keep in inbox
+//     "update-task"    apply existingTasks[].decision.edits of the matched task; keep in inbox
 //     "complete-task"  set matched task to Done       AND archive the email
 //     "cancel-task"    set matched task to Cancelled  AND archive the email
-//  Every email therefore ends up either flagged (in inbox) or archived.
+//  Every email therefore ends up either in the inbox or archived.
 //  Never delete an email, never reply, never draft.
+//
+//  ─── Star / flag is its OWN property: decision.flagged ──────────────────────
+//   • `isFlagged`        (step 1) = current state: Gmail has label STARRED / Outlook flagStatus "flagged"
+//   • `decision.flagged` (step 2) = wanted state after the save, for EVERY email (both mailboxes)
+//   • It is independent of the action: an archived email may stay starred, an
+//     inbox email may be unstarred. Page default = isFlagged; choosing a
+//     keep-in-inbox action ("flag" / "create-task" / "update-task") switches it ON
+//     as a convenience, Gabriel can toggle it back.
+//   • Step 3: flagged !== isFlagged → Gmail add/remove STARRED, Outlook flag_email
+//     "flagged" / "notFlagged"; equal → nothing. Applied for every action, after
+//     the archive/keep step. Outcome "starred" | "unstarred" | "flagged" | "unflagged".
 //
 //  ─── Gmail labels ≡ Notion Tags ─────────────────────────────────────────────
 //  Gmail (shared mailbox) labels and the Notion "Tags" multi-select share ONE
@@ -74,7 +85,12 @@
 //         (create a missing Gmail label first; do this for every action, archive included)
 //       - Notion: write the task tags as usual (decision.task.tags / suggestedTask.tags /
 //         decision.edits.tags), creating any missing option on the Tags property first.
-//   • Outlook emails have no labels: `labels` / `decision.labels` are absent.
+//   • `systemLabels` (step 1, gmail): every OTHER label on the message — the
+//     Gmail system labels such as IMPORTANT, UNREAD, CATEGORY_UPDATES,
+//     CATEGORY_PROMOTIONS … — EXCEPT INBOX and STARRED, which are modelled by the
+//     action and decision.flagged. Read-only: shown muted on the page, never
+//     edited by the page, never written back to Gmail by step 3.
+//   • Outlook emails have no labels: `labels` / `systemLabels` / `decision.labels` are absent.
 //
 //  Other hard rules:
 //   • Gmail-sourced tasks (suggestedTask / decision.task of a gmail email) are
@@ -134,8 +150,8 @@
       "subject": "Rates notice due 15 Sep",
       "date": "2026-08-28T22:14:00.000Z",
       "summary": "Council rates $612 due 15 Sep; pay via BPAY.",   // Claude's 1-2 line summary; also feeds the auto comment
-      "isFlagged": false,           // current flag/star state in the mailbox at triage time
-      // (no `labels` key: Outlook email)
+      "isFlagged": false,           // step 1: current flag (Outlook) / star (Gmail) state
+      // (no `labels` / `systemLabels` keys: Outlook email)
 
       // Step 1's classification; Gabriel can change it on the page. Drives the
       // default emailAction. Ignored (not shown) when existingTaskUrl is set.
@@ -160,6 +176,7 @@
       "decision": {
         "emailAction": "create-task",   // vocabulary above; ALWAYS one of the allowed values for this email
         "isTask": true,                 // derived: emailAction === "create-task". Never read it, read emailAction.
+        "flagged": true,                // step 2: wanted flag/star state (see header). Step 3 diffs vs isFlagged.
         // Gabriel's edited copy of the task to create. null means "use suggestedTask
         // unchanged". When emailAction is "create-task" the page guarantees that at
         // least one of decision.task / suggestedTask is non-null (it builds a
@@ -184,7 +201,8 @@
       "date": "2026-08-29T01:10:00.000Z",
       "summary": "Fare alert for Lisbon 12 Oct at $1,450 return.",
       "isFlagged": false,
-      "labels": ["Travel"],          // step 1: user labels on the email right now
+      "labels": ["Travel"],          // step 1: USER labels on the email right now (editable, == task tags)
+      "systemLabels": ["IMPORTANT", "CATEGORY_UPDATES", "UNREAD"],   // step 1: the rest, minus INBOX/STARRED (read-only)
       "category": "Important",
       "existingTaskUrl": null,
       "suggestedTask": {
@@ -198,6 +216,7 @@
       "decision": {
         "emailAction": "create-task",
         "isTask": true,
+        "flagged": true,                      // create-task switched it on; Gabriel left it on
         // Gabriel added the "House" label on the page → the task's tags follow,
         // so the page wrote an edited copy of the task with the same tags.
         "labels": ["Travel", "House"],        // step 2: desired Gmail labels after save (step 3 diffs vs `labels`)
@@ -222,12 +241,14 @@
       "summary": "Arina prefers the 12 Oct departure; asks to book by Friday.",
       "isFlagged": true,
       "labels": ["Travel"],
+      "systemLabels": ["IMPORTANT"],
       "category": "Important",    // present but not shown/used for tracked emails
       "existingTaskUrl": "https://www.notion.so/Book-Lisbon-flights-1a2b3c4d",   // must match existingTasks[].url
       "suggestedTask": null,
       "decision": {
         "emailAction": "update-task",   // update-task | complete-task | cancel-task only
         "isTask": false,
+        "flagged": false,               // Gabriel unstarred it on the page although it stays in the inbox
         "labels": ["Travel", "Errand"], // Gabriel toggled "Errand" → mirrored into the task's decision.edits.tags below
         "task": null
       }
@@ -304,8 +325,10 @@
 //    • gmailLabels: every user-created label of the shared Gmail.
 //    • mailboxes: which connectors were fetched.
 //    • emails[] (id, source, sourceId, from, subject, date, summary, isFlagged,
-//      category, existingTaskUrl | null, suggestedTask | null; gmail only: labels)
-//      — no decision / outcome
+//      category, existingTaskUrl | null, suggestedTask | null;
+//      gmail only: labels = user labels, systemLabels = all other labels minus
+//      INBOX/STARRED) — no decision / outcome.
+//      isFlagged: Gmail = message has STARRED; Outlook = flagStatus "flagged".
 //    • existingTasks[] with current Notion values (incl. tags, link, source,
 //      sourceId) — no decision / outcome
 //    • newTasks: []
@@ -333,7 +356,10 @@
 //          for "create-task" create decision.task ?? suggestedTask in Notion
 //          (Status "Not started", Link, Source, Source ID = email.sourceId; if a
 //          task with that Source ID already exists → outcome "skipped-duplicate").
-//          Gmail emails: also apply the label diff (labels → decision.labels).
+//          Then star/flag: decision.flagged !== isFlagged → Gmail STARRED add/remove
+//          or Outlook flag_email; every action, archived emails included.
+//          Gmail emails: also apply the USER label diff (labels → decision.labels);
+//          never touch systemLabels.
 //        – existingTasks of that group: apply decision.edits (only the keys
 //          present; create missing Tags options first), then
 //          decision.complete → Done / decision.cancel → Cancelled.

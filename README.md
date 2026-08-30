@@ -83,7 +83,9 @@ Light/dark toggle, remembered in `localStorage` (`triage-theme`).
 | FYI | `archive` · `flag` |
 | Important | `create-task` · `flag` · `archive` |
 
-Every email ends up either **flagged** (kept in the inbox, flag in Outlook / star in Gmail) or **archived** — there is no leave-alone and no create-email. `flag`, `create-task` and `update-task` keep the email flagged; `archive`, `complete-task` and `cancel-task` archive it.
+Every email ends up either **kept in the inbox** or **archived** — there is no leave-alone and no create-email. `flag` (shown as "Keep in inbox"), `create-task` and `update-task` keep it in the inbox; `archive`, `complete-task` and `cancel-task` archive it.
+
+The **star (Gmail) / flag (Outlook) is its own property** — a toggle on each row that writes `decision.flagged` (default = the mailbox's current `isFlagged`; choosing a keep-in-inbox action switches it on as a convenience). It is independent of the action: an archived email can stay starred. Gmail rows also show the message's **system labels** (Important, Updates, Promotions…) as muted read-only chips next to the editable user labels.
 
 - `create-task` — the task created is `decision.task` (Gabriel's edit) → else `suggestedTask` (Claude's) → else a **fallback** from subject + summary, built on Confirm. **Edit task** opens the editor (title, description, group, tags, due date); **Reset** returns to the suggestion. The email deep link is carried on the task automatically.
 - `flag` / `archive` — nothing under the ribbon.
@@ -157,7 +159,8 @@ Gmail user labels and the Notion **Tags** property share one namespace (identica
 - After processing, set `groups.<tab>.status` to `"processed"` / `"processed-with-errors"` and `groups.<tab>.processedAt`. Never write a session-level `status`.
 - Gmail emails of a reviewed `shared` group (every action, archive included): add `decision.labels − labels`, remove `labels − decision.labels` (create a Gmail label if missing). Task tags: create any missing option on the Notion Tags property before writing.
 - Legacy files (no `groups`, only `status` / `reviewedGroups`; or `groups` plus an orphan `reviewedGroups` stamp from the old page) are migrated by the page on load (`ensureGroups`); the save skill only needs to understand `groups`.
-- Email actions: `archive` → archive; `flag` → flag (Outlook) / star (Gmail), stays in inbox; `create-task` → create the Notion task from `decision.task ?? suggestedTask` (the page guarantees one of them) **and** flag the email; `update-task` → apply the matched task's `decision.edits` **and** flag the email; `complete-task` / `cancel-task` → set the task status (Done / Cancelled) **and** archive the email. Never delete, never reply.
+- Email actions decide inbox vs archive only: `archive` → archive; `flag` → keep in inbox; `create-task` → create the Notion task from `decision.task ?? suggestedTask` (the page guarantees one of them), keep in inbox; `update-task` → apply the matched task's `decision.edits`, keep in inbox; `complete-task` / `cancel-task` → set the task status (Done / Cancelled) **and** archive the email. Never delete, never reply.
+- Star/flag, every email of a reviewed group: `decision.flagged !== isFlagged` → Gmail add/remove `STARRED` / Outlook `flag_email` flagged / notFlagged; equal → nothing. Never touch `systemLabels`.
 - Existing tasks: apply `edits` (only changed fields present), then `complete` / `cancel`.
 - `newTasks`: create each in Notion.
 - Stamp a string outcome on each processed item (`outcome`), plus the group-level status/`processedAt` described above.

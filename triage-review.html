@@ -389,6 +389,16 @@
   .tag-chip.toggle:hover { border-color: var(--accent); color: var(--text); }
   .tag-chip.on { background: var(--accent); color: #fff; }
   .label-row .changed { font-size: 11px; color: var(--amber); margin-left: 4px; }
+  .tag-chip.sys { opacity: .7; font-style: italic; }
+  /* Star (Gmail) / flag (Outlook) toggle — independent of the action */
+  .flag-btn {
+    display: inline-flex; align-items: center; gap: 4px; margin-top: 4px;
+    padding: 1px 6px; border-radius: 4px; border: 1px solid transparent;
+    background: none; font: inherit; font-size: 12px; color: var(--muted); cursor: pointer;
+  }
+  .flag-btn:hover { border-color: var(--accent); color: var(--text); }
+  .flag-btn.on { color: var(--amber); font-weight: 600; }
+  .flag-btn.changed { border-color: var(--amber); }
   .task-row input[type="checkbox"] { width: 17px; height: 17px; margin-top: 2px; }
 
   /* ── Sticky confirm bar ───────────────────────────────────────────── */
@@ -689,7 +699,7 @@ const ACTION_ICONS = {
 };
 const TRACKED_ACTIONS = ["update-task", "complete-task", "cancel-task"];
 const ACTION_LABELS = {
-  "archive": "Archive", "flag": "Flag", "create-task": "Create task",
+  "archive": "Archive", "flag": "Keep in inbox", "create-task": "Create task",
   "update-task": "Update task", "complete-task": "Complete task", "cancel-task": "Cancel task",
 };
 // Marker separating Gabriel's own task description (above, never touched)
@@ -991,10 +1001,14 @@ function applyLoadDefaults() {
     const d = e.decision;
     if (d.task === undefined) d.task = null;
     if (!CATEGORIES.includes(e.category)) e.category = "FYI";
+    // Star/flag: `isFlagged` = now (step 1), `decision.flagged` = wanted (step 3 diffs them).
+    if (typeof d.flagged !== "boolean") d.flagged = !!e.isFlagged;
     if (e.source === "gmail") {
-      // Gmail labels: `labels` = what is on the email now (step 1),
-      // `decision.labels` = what Gabriel wants after the save (step 3 diffs them).
+      // Gmail labels: `labels` = user labels on the email now (step 1),
+      // `decision.labels` = what Gabriel wants after the save (step 3 diffs them);
+      // `systemLabels` = Gmail's own labels, read-only.
       if (!Array.isArray(e.labels)) e.labels = [];
+      if (!Array.isArray(e.systemLabels)) e.systemLabels = [];
       if (!Array.isArray(d.labels)) d.labels = [...e.labels];
     }
 
@@ -1035,10 +1049,15 @@ function setCategory(e, category) {
   syncDerived(e);
 }
 
+const KEEP_IN_INBOX = ["flag", "create-task", "update-task"];
 function setAction(e, action) {
   e.decision.emailAction = action;
+  // Convenience only: keeping an email in the inbox usually means starring it.
+  // decision.flagged stays an independent property Gabriel can toggle back.
+  if (KEEP_IN_INBOX.includes(action)) e.decision.flagged = true;
   syncDerived(e);
 }
+function flagChanged(e) { return !!e.decision.flagged !== !!e.isFlagged; }
 
 /**
  * Keep the derived fields consistent with the chosen action:
@@ -1309,16 +1328,40 @@ function renderEmails() {
       toggleLabel(session.emails[+chip.dataset.i], chip.dataset.label);
       renderReview();
     }));
+  $("emails-list").querySelectorAll("[data-flag]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      const e = session.emails[+btn.dataset.flag];
+      e.decision.flagged = !e.decision.flagged;
+      renderReview();
+    }));
 }
 
-/** Clickable Gmail label chips (gmail emails only). Same names as Notion Tags. */
+/** Star (Gmail) / flag (Outlook) toggle. Wanted state lives in decision.flagged. */
+function flagBtnHTML(i) {
+  const e = session.emails[i];
+  const on = !!e.decision.flagged;
+  const gmail = e.source === "gmail";
+  const icon = gmail ? (on ? "⭐" : "☆") : (on ? "🚩" : "⚑");
+  const word = gmail ? (on ? "starred" : "not starred") : (on ? "flagged" : "not flagged");
+  const title = `${word} — click to ${on ? "un" : ""}${gmail ? "star" : "flag"}` +
+                (flagChanged(e) ? ` (currently ${e.isFlagged ? "" : "not "}${gmail ? "starred" : "flagged"} in the mailbox)` : "");
+  return `<button type="button" class="flag-btn ${on ? "on" : ""} ${flagChanged(e) ? "changed" : ""}" data-flag="${i}" title="${esc(title)}">${icon} ${word}${flagChanged(e) ? " ·" : ""}</button>`;
+}
+/** Display name for a Gmail system label (CATEGORY_UPDATES → Updates). */
+function prettyLabel(l) {
+  const s = String(l).replace(/^CATEGORY_/, "");
+  return s.charAt(0) + s.slice(1).toLowerCase().replace(/_/g, " ");
+}
+/** Clickable Gmail user-label chips + muted read-only system labels (gmail only). */
 function labelRowHTML(i) {
   const e = session.emails[i];
   if (!hasGmailLabels(e)) return "";
   const on = e.decision.labels || [];
   const chips = labelOptions(e.labels, on).map((l) =>
     `<span class="tag-chip toggle ${on.includes(l) ? "on" : ""}" data-label="${esc(l)}" data-i="${i}" title="Toggle Gmail label / task tag">${esc(l)}</span>`).join("");
-  return `<div class="label-row"><span class="label-title">🏷️ labels</span>${chips}${labelsChanged(e) ? `<span class="changed">changed</span>` : ""}</div>`;
+  const sys = (e.systemLabels || []).map((l) =>
+    `<span class="tag-chip sys" title="Gmail system label ${esc(l)} (read-only)">${esc(prettyLabel(l))}</span>`).join("");
+  return `<div class="label-row"><span class="label-title">🏷️ labels</span>${chips}${labelsChanged(e) ? `<span class="changed">changed</span>` : ""}${sys}</div>`;
 }
 
 function emailRowHTML(i) {
@@ -1366,7 +1409,7 @@ function emailRowHTML(i) {
     <div class="email-row ${tracked ? "cat-fyi" : getCatClass(e.category)}">
       <div class="cell-date">
         ${formatDate(e.date)}
-        ${e.isFlagged ? `<span class="flag-mark">🚩 flagged</span>` : ""}
+        ${flagBtnHTML(i)}
         <span class="flag-mark" style="color:var(--muted)">${esc(e.source)}</span>
       </div>
       <div>
@@ -1539,8 +1582,9 @@ function counts(tab = ui.tab) {
   const by = (a) => emails.filter((e) => e.decision.emailAction === a).length;
   return {
     createTasks: by("create-task"),
-    flags: by("flag") + by("create-task") + by("update-task"),
+    keep: by("flag") + by("create-task") + by("update-task"),
     archives: by("archive") + by("complete-task") + by("cancel-task"),
+    flags: emails.filter(flagChanged).length,
     updates: by("update-task"),
     completions: existing.filter((t) => t.decision.complete).length,
     cancels: existing.filter((t) => t.decision.cancel).length,
@@ -1556,7 +1600,8 @@ function renderConfirmBar() {
   const done = tabConfirmed(ui.tab);
   $("confirm-summary").innerHTML =
     `<span style="font-weight:700;color:var(--text)">${tab.icon} ${esc(tab.label)}</span> · ` +
-    `<b>${c.createTasks}</b> tasks to create · <b>${c.flags}</b> to flag · <b>${c.archives}</b> to archive · ` +
+    `<b>${c.createTasks}</b> tasks to create · <b>${c.keep}</b> kept in inbox · <b>${c.archives}</b> to archive · ` +
+    `<b>${c.flags}</b> ${ui.tab === "shared" ? "star" : "flag"} changes · ` +
     `<b>${c.updates}</b> task updates · <b>${c.completions}</b> done · <b>${c.cancels}</b> cancelled · ` +
     `<b>${c.edits}</b> edited · <b>${c.newTasks}</b> new` +
     (ui.tab === "shared" ? ` · <b>${c.labelChanges}</b> label changes` : "");
