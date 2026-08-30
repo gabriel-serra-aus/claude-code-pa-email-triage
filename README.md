@@ -27,22 +27,22 @@ flowchart LR
     NO[(Notion open tasks)] --> T
     T["1 · pa-email-triage<br/>(Cowork skill)<br/>classify + suggest tasks"]
     T -- "writes<br/>status: pending-review" --> F[/"triage-session.json"/]
-    F -- "File System Access API" --> P["2 · triage-review.html<br/>(Gabriel, Edge/Chrome)<br/>category → action, edit tasks,<br/>Confirm & Save per tab"]
-    P -- "writes decisions + newTasks<br/>status: reviewed" --> F
-    F -- "read when status = reviewed" --> S["3 · pa-email-triage-save<br/>(Cowork skill)<br/>apply decisions"]
+    F -- "File System Access API" --> P["2 · triage-review.html<br/>(Gabriel, Edge/Chrome)<br/>category → action, edit tasks,<br/>Confirm & Save or Skip per tab"]
+    P -- "writes decisions + newTasks<br/>groups.&lt;tab&gt;.status: reviewed | skipped" --> F
+    F -- "once no group is pending-review:<br/>each group with status = reviewed" --> S["3 · pa-email-triage-save<br/>(Cowork skill)<br/>apply decisions per group"]
     S --> NO2[(Notion: create / update /<br/>complete / cancel tasks)]
-    S --> MB[(Outlook + Gmail:<br/>archive, draft emails)]
-    S -- "stamps processedAt + outcomes<br/>status: processed" --> F
+    S --> MB[(Outlook + Gmail:<br/>flag or archive)]
+    S -- "stamps outcomes<br/>groups.&lt;tab&gt;.status: processed" --> F
     F -. "read-only outcome summary" .-> P
 ```
 
-| Step | Who | Reads | Writes | `status` after |
+| Step | Who | Reads | Writes | `groups.<tab>.status` after |
 |---|---|---|---|---|
 | 1. Triage | **pa-email-triage** (Cowork skill) | Outlook inbox, shared Gmail inbox, open Notion tasks | the session file: emails + category + `suggestedTask` + matched Notion tasks (`existingTaskUrl`, `existingTasks`) | `pending-review` |
-| 2. Review | **this page** (Gabriel) | the session file | the same file: `decision` blocks, `newTasks`, `reviewedGroups`, `skippedGroups` | `reviewed` once every visible tab is confirmed |
-| 3. Save | **pa-email-triage-save** (Cowork skill) | the reviewed file | Notion (create/update/complete/cancel), Outlook/Gmail (archive, draft emails); stamps `processedAt` + per-item outcomes | `processed` or `processed-with-errors` |
+| 2. Review | **this page** (Gabriel) | the session file | the same file: `decision` blocks, `newTasks`, `groups.<tab>` | `reviewed` (Confirm & Save) or `skipped` (Skip) for **that tab only** — the other tab stays `pending-review` until it gets its own Confirm or Skip |
+| 3. Save | **pa-email-triage-save** (Cowork skill) | **only once neither group is `pending-review`**; then every group whose status is `reviewed` | Notion (create/update/complete/cancel), Outlook/Gmail (flag or archive); stamps per-item outcomes + `groups.<tab>.processedAt` | `processed` or `processed-with-errors` for that group; `skipped` groups stay `skipped` |
 
-**Input** of the page = the file as written by pa-email-triage. **Output** = the same file with `decision` blocks, `newTasks`, `reviewedGroups`/`skippedGroups` and `status: "reviewed"` — which is the entire input of pa-email-triage-save. The page makes **no network calls**; the whole JSON is loaded, mutated in place and written back, so every field it does not know about is preserved.
+**Input** of the page = the file as written by pa-email-triage. **Output** = the same file with `decision` blocks, `newTasks` and `groups.<personal|shared>.status: "reviewed"` or `"skipped"` — which is the entire input of pa-email-triage-save. **Each group has its own status and is decided independently**: Personal can be confirmed while Gabriel & Arina is skipped, and vice-versa — but the save skill only runs once **both** have been decided (no group left `pending-review`). The top-level `status` is only a derived summary (`pending-review` while any group is pending → `reviewed` while any group awaits the save → `processed-with-errors` / `processed` → `skipped` only when every group was skipped); nothing keys off it. The page makes **no network calls**; the whole JSON is loaded, mutated in place and written back, so every field it does not know about is preserved.
 
 Two mailboxes → two review queues (tabs):
 
@@ -62,8 +62,9 @@ Existing Notion tasks and manually added tasks land on a tab by their `group` (s
   1. **Emails** — from, subject, date/age, Claude's summary, 🚩 if `isFlagged`, source badge, deep link (`suggestedTask.link`, else built from `id`: `outlook.live.com/mail/0/inbox/id/…` or `mail.google.com/mail/u/0/#inbox/…`). Filter by category. Each row has a **Category** ribbon and an **Action** ribbon (§3). Emails already matched to a Notion task show **✓ Tracked** instead of a category.
   2. **Existing Notion tasks** for this tab — Open / Done / Cancelled select + **Edit** (task editor with live diff against Notion).
   3. **New tasks** — **+ Add task**; editable/deletable until confirmed.
-  4. **Sticky bar** — counts for the tab (archive / task / email / none, edited, new) and **Confirm & Save — <tab>**.
+  4. **Sticky bar** — counts for the tab (tasks to create / to flag / to archive / task updates, done, cancelled, edited, new), **Skip — <tab>** and **Confirm & Save — <tab>**.
 - **Reviewed** (`reviewed`) — read-only "waiting for pa-email-triage-save".
+- **Skipped** (`skipped`) — read-only "pa-email-triage-save will leave it alone", with a **Reopen for review** button that puts the tab back to `pending-review` (only possible while the save skill hasn't run).
 - **Processed** (`processed` / `processed-with-errors`) — read-only outcome list: one row per email, existing task and new task with the outcome the save skill stamped (first of `outcome | result | applied | processed` on the item; text containing "fail" is red). Without an outcome field the badge falls back to the decision ("Archive", "completed", "created"…).
 
 Light/dark toggle, remembered in `localStorage` (`triage-theme`).
@@ -79,12 +80,13 @@ Light/dark toggle, remembered in `localStorage` (`triage-theme`).
 | Category | Actions (first = default) |
 |---|---|
 | Not Important | `archive` (locked) |
-| FYI | `archive` · `none` |
-| Important | `create-task` · `create-email` · `none` |
+| FYI | `archive` · `flag` |
+| Important | `create-task` · `flag` · `archive` |
+
+Every email ends up either **flagged** (kept in the inbox, flag in Outlook / star in Gmail) or **archived** — there is no leave-alone and no create-email. `flag`, `create-task` and `update-task` keep the email flagged; `archive`, `complete-task` and `cancel-task` archive it.
 
 - `create-task` — the task created is `decision.task` (Gabriel's edit) → else `suggestedTask` (Claude's) → else a **fallback** from subject + summary, built on Confirm. **Edit task** opens the editor (title, description, group, tags, due date); **Reset** returns to the suggestion. The email deep link is carried on the task automatically.
-- `create-email` — the save skill drafts a reply; nothing to edit on the page.
-- `archive` / `none` — nothing under the ribbon.
+- `flag` / `archive` — nothing under the ribbon.
 
 ### Emails tracked in Notion (`existingTaskUrl` set)
 
@@ -115,15 +117,18 @@ The editor records only **changed** fields versus Notion: `decision.edits = { ti
 
 ---
 
-## 4. Confirm & Save — per tab
+## 4. Confirm & Save / Skip — per tab
 
-Pressing **Confirm & Save — <tab>**:
+**The file is written only here.** Editing decisions on the page changes nothing on disk until you press one of the two buttons in the sticky bar. Both go through `writeGroupStatus()`:
 
 1. `materializeDecisions()` — syncs derived fields, builds fallback tasks for Important emails without one, enforces the group rule, turns pending auto comments into `edits.notes`.
-2. **Stale-tab guard** — re-reads the file and refuses to write if it is no longer `pending-review` (a forgotten old tab cannot clobber a reviewed/processed session). `reviewedGroups` from disk is merged in, so the other tab's confirmation is never lost.
-3. Stamps `reviewedGroups.<personal|shared>` with an ISO timestamp; the tab becomes read-only.
-4. When **every visible tab** is confirmed → `status: "reviewed"`. Any tab hidden by `?type=…` that has not itself been confirmed is **neutralised** first — its emails get `emailAction: "none"`, `isTask: false`, `task: null`; its existing tasks get `complete: false, cancel: false, edits: null`; its new tasks are removed — and it is listed in `skippedGroups`. The save skill therefore keys off `status` alone and can never act on a group that was not reviewed.
-5. Writes the whole JSON (pretty-printed). On failure the status and timestamp are rolled back so the UI stays editable.
+2. **Stale-tab guard** — re-reads the file and refuses to write if *this group* is no longer `pending-review` on disk (a forgotten old tab cannot clobber a reviewed/skipped/processed group). The other group's `groups.<tab>` entry is taken from disk, and if it has moved on (decided elsewhere or already processed) its emails / tasks / newTasks are adopted from disk too, so nothing that was already decided is overwritten.
+3. Sets `groups.<personal|shared> = { status: "reviewed" | "skipped", reviewedAt: <ISO>, processedAt: null }` for **this tab only** (`reviewedAt` = when Gabriel decided, for both buttons); the tab becomes read-only. The other tab stays `pending-review` and fully editable. A **skipped** tab keeps its drafted decisions in the file (the save skill ignores them) and offers **Reopen for review**, which writes it back to `pending-review` (guard: still `skipped` on disk) with `reviewedAt: null`.
+4. Recomputes the derived top-level `status` and writes the whole JSON (pretty-printed). On failure the group status is rolled back so the UI stays editable.
+
+`pa-email-triage-save` refuses to run while either group is still `pending-review`, so every session ends with each tab either confirmed or skipped.
+
+A tab whose group is `processed` / `processed-with-errors` shows that group's read-only outcome summary instead of the review UI.
 
 The page never writes `processedAt` or per-item outcome fields — those belong to the save skill.
 
@@ -131,13 +136,18 @@ The page never writes `processedAt` or per-item outcome fields — those belong 
 
 ## 5. File contract — `triage-session.json`
 
+**The authoritative, fully commented contract is [`triage-session.schema.jsonc`](triage-session.schema.jsonc)** — every key, who writes it, the action vocabulary and the per-step responsibilities. All three steps (pa-email-triage, this page, pa-email-triage-save) must follow it. The summary below is kept short.
+
 ```jsonc
 {
-  "status": "pending-review",            // → "reviewed" → "processed" | "processed-with-errors"
+  "status": "pending-review",            // DERIVED summary only — see groups
   "generatedAt": "2026-08-29T08:00:00Z",  // step 1
-  "reviewedGroups": { "personal": "…ISO…", "shared": "…ISO…" },   // step 2, per tab
-  "skippedGroups": ["shared"],            // step 2, only when a tab was hidden by ?type=
-  "processedAt": "…ISO…",                 // step 3 only — page never writes it
+  "groups": {                             // one independent status per tab
+    "personal": { "status": "pending-review", "reviewedAt": null, "processedAt": null },
+    "shared":   { "status": "reviewed", "reviewedAt": "…ISO…", "processedAt": null }
+    // status: "pending-review" → "reviewed" | "skipped" (page, step 2); "reviewed" → "processed" | "processed-with-errors" (save skill, step 3); "skipped" stays "skipped"
+    // personal = Outlook emails + tasks in any group except "Gabriel & Arina"; shared = Gmail emails + tasks in "Gabriel & Arina"
+  },
 
   "emails": [{
     "id": "…",                            // mailbox message id (used for the deep link)
@@ -149,7 +159,7 @@ The page never writes `processedAt` or per-item outcome fields — those belong 
     "existingTaskUrl": "https://notion.so/…" | null,   // set ⇒ "tracked"; must match an existingTasks[].url
     "suggestedTask": { "title", "notes", "group", "tags": [], "dueDate": "YYYY-MM-DD" | "", "link" } | null,
     "decision": {
-      "emailAction": "archive" | "none" | "create-task" | "create-email"
+      "emailAction": "archive" | "flag" | "create-task"
                    | "update-task" | "complete-task" | "cancel-task",
       "isTask": false,                    // derived: emailAction === "create-task"
       "task": { …same shape as suggestedTask… } | null   // Gabriel's edited copy / fallback
@@ -171,7 +181,7 @@ The page never writes `processedAt` or per-item outcome fields — those belong 
 }
 ```
 
-**Loading rules** (`applyLoadDefaults`): a file without an `emails` array is rejected. Missing `decision` / `existingTasks` / `newTasks` are created; an invalid category becomes `FYI`; an action that is missing or not allowed for that email (legacy `flag` / `isTask` yes-no files) is derived — from the matched task's Done/Cancelled if tracked, from `isTask: true` → `create-task`, else the category default.
+**Loading rules** (`applyLoadDefaults`): a file without an `emails` array is rejected. Missing `decision` / `existingTasks` / `newTasks` are created; an invalid category becomes `FYI`; an action that is missing or not allowed for that email (legacy `none` / `create-email` / `isTask` yes-no files) is derived — from the matched task's Done/Cancelled if tracked, from `isTask: true` → `create-task`, legacy `none` / `create-email` → `flag`, else the category default.
 
 ### What pa-email-triage must produce
 
@@ -179,11 +189,14 @@ The page never writes `processedAt` or per-item outcome fields — those belong 
 
 ### What pa-email-triage-save must honour
 
-- Act only when `status === "reviewed"`; groups in `skippedGroups` are already neutralised.
-- Email actions: `archive` → archive; `none` → nothing; `create-task` → create the Notion task from `decision.task` (guaranteed present); `create-email` → draft the email; `update-task` → apply the matched task's `decision.edits`; `complete-task` / `cancel-task` → set the task status **and** archive the email.
+- **Gate first:** if `groups.personal.status` or `groups.shared.status` is `pending-review`, stop and touch nothing — Gabriel must Confirm or Skip every tab before anything is applied.
+- Then act **per group**: for each `groups.<tab>` whose `status === "reviewed"`, apply that group's items only — `personal` = emails with `source !== "gmail"` + tasks whose `group !== "Gabriel & Arina"`; `shared` = Gmail emails + tasks in "Gabriel & Arina". Never touch a group that is `skipped` (its `decision` blocks are drafts Gabriel chose not to apply — leave the status `skipped`) or already `processed`.
+- Ignore the top-level `status`; after processing, set `groups.<tab>.status` to `"processed"` / `"processed-with-errors"` and `groups.<tab>.processedAt`, then recompute top-level `status` (`pending-review` if any group is pending, else `reviewed` if any group is reviewed, else `processed-with-errors` if any, else `processed` if any, else `skipped`).
+- Legacy files (no `groups`, only `status` / `reviewedGroups`; or `groups` plus an orphan `reviewedGroups` stamp from the old page) are migrated by the page on load (`ensureGroups`); the save skill only needs to understand `groups`.
+- Email actions: `archive` → archive; `flag` → flag (Outlook) / star (Gmail), stays in inbox; `create-task` → create the Notion task from `decision.task` (guaranteed present) **and** flag the email; `update-task` → apply the matched task's `decision.edits` **and** flag the email; `complete-task` / `cancel-task` → set the task status (Done / Cancelled) **and** archive the email. Never delete, never reply.
 - Existing tasks: apply `edits` (only changed fields present), then `complete` / `cancel`.
 - `newTasks`: create each in Notion.
-- Stamp `processedAt`, a string outcome on each item, and `status: "processed"` (or `"processed-with-errors"`).
+- Stamp a string outcome on each processed item (`outcome`), plus the group-level status/`processedAt` described above.
 
 ---
 
@@ -191,6 +204,7 @@ The page never writes `processedAt` or per-item outcome fields — those belong 
 
 | File | Purpose |
 |---|---|
+| `triage-session.schema.jsonc` | Annotated example of the session file — the single contract every skill and the page must follow |
 | `triage-review.html` | the whole app — vanilla JS + CSS in one file |
 | `CLAUDE.md` | guidance for Claude Code (decision model, file contract, editing tips) |
 | `improvements.md` | log of the Aug 2026 UI rework — add to it for deliberate UX changes |
