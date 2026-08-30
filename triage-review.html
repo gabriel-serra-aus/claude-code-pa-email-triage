@@ -382,6 +382,13 @@
     color: var(--muted);
     margin: 1px 3px 1px 0;
   }
+  /* Gmail label chips on an email row: click to toggle. Same names as Notion Tags. */
+  .label-row { margin-top: 5px; display: flex; flex-wrap: wrap; align-items: center; gap: 2px; }
+  .label-row .label-title { font-size: 11px; color: var(--muted); margin-right: 4px; }
+  .tag-chip.toggle { cursor: pointer; border: 1px solid transparent; user-select: none; }
+  .tag-chip.toggle:hover { border-color: var(--accent); color: var(--text); }
+  .tag-chip.on { background: var(--accent); color: #fff; }
+  .label-row .changed { font-size: 11px; color: var(--amber); margin-left: 4px; }
   .task-row input[type="checkbox"] { width: 17px; height: 17px; margin-top: 2px; }
 
   /* ── Sticky confirm bar ───────────────────────────────────────────── */
@@ -699,8 +706,8 @@ const AUTO_MARKER = "-- auto comment --";
 // pa-email-triage-save refuses to run while either group is "pending-review";
 // it then applies the "reviewed" groups and leaves "skipped" ones untouched
 // (they stay "skipped" — Gabriel can reopen a skipped tab here until then).
-// The top-level session.status is only a derived summary (see
-// aggregateStatus) — nothing keys off it any more.
+// There is NO top-level status: groups.personal / groups.shared are the only
+// two statuses in the file (ensureGroups strips legacy keys and extra groups).
 const GROUP_STATUSES = ["pending-review", "reviewed", "skipped", "processed", "processed-with-errors"];
 const ALL_TABS = [
   { id: "personal", label: "Personal",    icon: "👤" },
@@ -753,20 +760,11 @@ function ensureGroups(s) {
     }
     g[t.id] = { status, reviewedAt: legacyReviewedAt, processedAt };
   }
-  s.groups = g;
-  delete s.reviewedGroups; // fully migrated into groups — never written back
+  // Exactly two groups, nothing else.
+  s.groups = { personal: g.personal, shared: g.shared };
+  // Legacy whole-session keys are fully migrated into groups — never written back.
+  for (const k of ["status", "reviewedGroups", "skippedGroups", "processedAt"]) delete s[k];
   return g;
-}
-/** Derived whole-session status: pending while any group is pending, then
- *  reviewed while any group awaits the save skill, then processed; "skipped"
- *  only when every group was skipped. */
-function aggregateStatus(s) {
-  const st = ALL_TABS.map((t) => groupStatus(t.id, s));
-  if (st.includes("pending-review")) return "pending-review";
-  if (st.includes("reviewed")) return "reviewed";
-  if (st.includes("processed-with-errors")) return "processed-with-errors";
-  if (st.includes("processed")) return "processed";
-  return "skipped";
 }
 /** Default group for a task created from the current tab. */
 function tabDefaultGroup(tab) {
@@ -979,7 +977,7 @@ async function loadFromHandle(handle) {
 /** Fill in decision defaults / migrate legacy values for everything in the file. */
 function applyLoadDefaults() {
   ensureGroups(session);
-  session.status = aggregateStatus(session);
+  session.gmailLabels = Array.isArray(session.gmailLabels) ? session.gmailLabels : [];
   session.existingTasks = session.existingTasks || [];
   for (const t of session.existingTasks) {
     if (!t.decision) t.decision = { complete: false, cancel: false, edits: null };
@@ -993,6 +991,12 @@ function applyLoadDefaults() {
     const d = e.decision;
     if (d.task === undefined) d.task = null;
     if (!CATEGORIES.includes(e.category)) e.category = "FYI";
+    if (e.source === "gmail") {
+      // Gmail labels: `labels` = what is on the email now (step 1),
+      // `decision.labels` = what Gabriel wants after the save (step 3 diffs them).
+      if (!Array.isArray(e.labels)) e.labels = [];
+      if (!Array.isArray(d.labels)) d.labels = [...e.labels];
+    }
 
     const allowed = allowedActions(e);
     if (!allowed.includes(d.emailAction)) {
@@ -1103,7 +1107,47 @@ function hasPendingAutoComment(t) {
 
 /** Task to create for an Important email that has no suggestion and hasn't been edited. */
 function fallbackTask(e) {
-  return { title: e.subject || "(no subject)", notes: e.summary || "", group: allowedGroups(e.source)[0], tags: [], dueDate: "", link: emailDeepLink(e) };
+  const tags = e.source === "gmail" ? [...(e.decision.labels || [])] : [];
+  return { title: e.subject || "(no subject)", notes: e.summary || "", group: allowedGroups(e.source)[0], tags, dueDate: "", link: emailDeepLink(e) };
+}
+
+// ── Gmail labels ≡ Notion Tags ────────────────────────────────────────
+// For a Gmail email linked to a task (create-task or tracked) the email's
+// labels and the task's tags are ONE value. Whichever side Gabriel edits
+// last wins and is copied to the other; the save skill writes labels to
+// Gmail and tags to Notion.
+function sameSet(a, b) {
+  return JSON.stringify([...(a || [])].sort()) === JSON.stringify([...(b || [])].sort());
+}
+function hasGmailLabels(e) { return e.source === "gmail"; }
+function labelsChanged(e) { return hasGmailLabels(e) && !sameSet(e.labels, e.decision.labels); }
+/** All label names the page can offer: Gmail user labels + fixed tags + anything already used. */
+function labelOptions(...extra) {
+  return [...new Set([...(session.gmailLabels || []), ...TAGS, ...extra.flat().filter(Boolean)])];
+}
+/** Email labels changed → push them onto the linked task's tags. */
+function syncTaskFromLabels(e) {
+  if (!hasGmailLabels(e)) return;
+  const d = e.decision;
+  if (isTracked(e)) {
+    const t = trackedTask(e);
+    if (!t) return;
+    const edits = { ...(t.decision.edits || {}) };
+    if (sameSet(d.labels, t.tags)) delete edits.tags; else edits.tags = [...d.labels];
+    t.decision.edits = Object.keys(edits).length ? edits : null;
+  } else if (d.emailAction === "create-task") {
+    const t = effectiveTask(e);
+    if (!sameSet(t.tags, d.labels)) d.task = { ...t, tags: [...d.labels] };
+  }
+}
+/** Task tags changed (editor) → push them onto every linked Gmail email's labels. */
+function syncLabelsFromTags(emails, tags) {
+  for (const e of emails) if (hasGmailLabels(e)) e.decision.labels = [...(tags || [])];
+}
+function toggleLabel(e, label) {
+  const d = e.decision;
+  d.labels = d.labels.includes(label) ? d.labels.filter((l) => l !== label) : [...d.labels, label];
+  syncTaskFromLabels(e);
 }
 function effectiveTask(e) {
   return e.decision.task || e.suggestedTask || fallbackTask(e);
@@ -1260,6 +1304,21 @@ function renderEmails() {
     }));
   $("emails-list").querySelectorAll("[data-act]").forEach((btn) =>
     btn.addEventListener("click", () => onEmailAction(btn.dataset.act, +btn.dataset.i)));
+  $("emails-list").querySelectorAll("[data-label]").forEach((chip) =>
+    chip.addEventListener("click", () => {
+      toggleLabel(session.emails[+chip.dataset.i], chip.dataset.label);
+      renderReview();
+    }));
+}
+
+/** Clickable Gmail label chips (gmail emails only). Same names as Notion Tags. */
+function labelRowHTML(i) {
+  const e = session.emails[i];
+  if (!hasGmailLabels(e)) return "";
+  const on = e.decision.labels || [];
+  const chips = labelOptions(e.labels, on).map((l) =>
+    `<span class="tag-chip toggle ${on.includes(l) ? "on" : ""}" data-label="${esc(l)}" data-i="${i}" title="Toggle Gmail label / task tag">${esc(l)}</span>`).join("");
+  return `<div class="label-row"><span class="label-title">🏷️ labels</span>${chips}${labelsChanged(e) ? `<span class="changed">changed</span>` : ""}</div>`;
 }
 
 function emailRowHTML(i) {
@@ -1314,6 +1373,7 @@ function emailRowHTML(i) {
         <div class="subject">${esc(e.subject)}</div>
         <div class="from-line">${esc(name)} ${email ? `<span class="from-email">&lt;${esc(email)}&gt;</span>` : ""}</div>
         <div class="summary">${esc(e.summary)}</div>
+        ${labelRowHTML(i)}
       </div>
       <div>${catCell}</div>
       <div class="task-block">${actSel}${detail}</div>
@@ -1324,6 +1384,7 @@ function onEmailAction(act, i) {
   const e = session.emails[i];
   if (act === "reset") {
     e.decision.task = null; // back to the suggestion (or the subject/summary fallback)
+    syncLabelsFromTags([e], effectiveTask(e).tags);
     renderReview();
   } else if (act === "edit") {
     openTaskEditor({
@@ -1334,6 +1395,7 @@ function onEmailAction(act, i) {
         // The edited copy goes into decision.task — link is preserved
         // (never hand-edited) and generated for inline-created tasks.
         e.decision.task = { ...values, link: (e.decision.task && e.decision.task.link) || (e.suggestedTask && e.suggestedTask.link) || emailDeepLink(e) };
+        syncLabelsFromTags([e], values.tags);
         renderReview();
       },
     });
@@ -1422,6 +1484,7 @@ function editExistingTask(i) {
       const sameTags = JSON.stringify([...(values.tags || [])].sort()) === JSON.stringify([...(t.tags || [])].sort());
       if (!sameTags) edits.tags = values.tags;
       t.decision.edits = Object.keys(edits).length ? edits : null;
+      syncLabelsFromTags(emailsForTask(t), values.tags);
       renderReview();
     },
   });
@@ -1483,6 +1546,7 @@ function counts(tab = ui.tab) {
     cancels: existing.filter((t) => t.decision.cancel).length,
     edits: existing.filter((t) => t.decision.edits || hasPendingAutoComment(t)).length,
     newTasks: session.newTasks.filter((t) => taskInTab(t, tab)).length,
+    labelChanges: emails.filter(labelsChanged).length,
   };
 }
 
@@ -1494,7 +1558,8 @@ function renderConfirmBar() {
     `<span style="font-weight:700;color:var(--text)">${tab.icon} ${esc(tab.label)}</span> · ` +
     `<b>${c.createTasks}</b> tasks to create · <b>${c.flags}</b> to flag · <b>${c.archives}</b> to archive · ` +
     `<b>${c.updates}</b> task updates · <b>${c.completions}</b> done · <b>${c.cancels}</b> cancelled · ` +
-    `<b>${c.edits}</b> edited · <b>${c.newTasks}</b> new`;
+    `<b>${c.edits}</b> edited · <b>${c.newTasks}</b> new` +
+    (ui.tab === "shared" ? ` · <b>${c.labelChanges}</b> label changes` : "");
   const btn = $("btn-confirm");
   btn.disabled = done;
   btn.textContent = tabSkipped(ui.tab) ? `⏭ ${tab.label} skipped`
@@ -1511,6 +1576,7 @@ function renderConfirmBar() {
 function materializeDecisions() {
   for (const e of session.emails) {
     syncDerived(e);
+    syncTaskFromLabels(e); // Gmail labels ≡ task tags in the written file
     if (e.decision.emailAction === "create-task") {
       // Group hard rule + guarantee there is always a task object to create.
       if (!e.decision.task && !e.suggestedTask) e.decision.task = fallbackTask(e);
@@ -1538,7 +1604,6 @@ function adoptGroupFromDisk(onDisk, tab) {
     ...session.newTasks.filter((t) => !taskInTab(t, tab)),
     ...(onDisk.newTasks || []).filter((t) => taskInTab(t, tab)),
   ];
-  if (onDisk.processedAt !== undefined) session.processedAt = onDisk.processedAt;
 }
 
 /** The one place the file is written. Moves THIS tab's group from
@@ -1568,7 +1633,6 @@ async function writeGroupStatus(tab, status, expectedOnDisk, toast) {
     // skip); null again when a skipped tab is reopened.
     const reviewedAt = status === "pending-review" ? null : new Date().toISOString();
     session.groups[tab] = { ...session.groups[tab], status, reviewedAt, processedAt: null };
-    session.status = aggregateStatus(session);
     // Never set processedAt or outcome fields — those belong to pa-email-triage-save.
     const writable = await fileHandle.createWritable();
     await writable.write(JSON.stringify(session, null, 2));
@@ -1577,7 +1641,6 @@ async function writeGroupStatus(tab, status, expectedOnDisk, toast) {
     return true;
   } catch (err) {
     session.groups = before; // roll back so the UI stays editable
-    session.status = aggregateStatus(session);
     showToast("Save failed — " + err.message);
     return false;
   }
@@ -1717,7 +1780,7 @@ function openTaskEditor({ heading, source, initial, onApply, notesHint, original
     hint.classList.add("hidden");
   }
 
-  $("m-tags").innerHTML = TAGS.map((t) => `
+  $("m-tags").innerHTML = labelOptions(initial.tags).map((t) => `
     <label><input type="checkbox" value="${esc(t)}" ${(initial.tags || []).includes(t) ? "checked" : ""}> ${esc(t)}</label>`).join("");
 
   $("modal-overlay").classList.remove("hidden");

@@ -13,7 +13,7 @@ The old Next.js app (Apr–Aug 2026) and the local `localhost:8765` server scrip
 
 ## The three-step loop (all decisions live in ONE file)
 
-1. **pa-email-triage** (Cowork skill) — fetches Outlook + shared Gmail + open Notion tasks, classifies, and writes `D:\Gabriel\OneDrive\Claude\Workspace\Personal Assistance\email-triage\triage-session.json` with `status: "pending-review"`.
+1. **pa-email-triage** (Cowork skill) — fetches Outlook + shared Gmail + open Notion tasks, classifies, and writes `D:\Gabriel\OneDrive\Claude\Workspace\Personal Assistance\email-triage\triage-session.json` with both `groups.*.status: "pending-review"` (plus `gmailLabels` / `emails[].labels` for Gmail).
 2. **triage-review.html** — opened in Edge/Chrome from the GitHub Pages URL; reads and writes that same file via the File System Access API (no APIs, no Gmail/Outlook/Notion calls; the file handle is remembered per browser origin in IndexedDB). Gabriel accepts/rejects/edits task suggestions, sets email actions, completes/edits existing tasks, adds new ones; **Confirm & Save** flips `groups.<personal|shared>.status` to `"reviewed"` and **Skip** to `"skipped"`, **for that tab only**. Nothing is written to disk until one of those two buttons is pressed.
 3. **pa-email-triage-save** (Cowork skill) — refuses to run while either group is still `"pending-review"`; then applies every group whose status is `"reviewed"` to Notion + the mailboxes and stamps that group `"processed"` (or `"processed-with-errors"`) + `processedAt`; `"skipped"` groups are left exactly as they are. The page then shows a read-only outcome summary in each processed tab.
 
@@ -26,13 +26,14 @@ The **category** is the one thing Gabriel decides and it drives the **action** (
 - `decision.isTask` is derived (`emailAction === "create-task"`). An Important email without a suggestion gets a task built from subject + summary on Confirm (`fallbackTask`).
 - Task description updates go into `existingTasks[].decision.edits.notes`: everything above the literal marker `-- auto comment --` is Gabriel's and never touched; everything below is Claude's one-or-two-line briefing (one `DD Mon: summary` line per matched email), replaced on each run.
 - Gmail-sourced tasks are locked to group "Gabriel & Arina"; Outlook-sourced tasks can never have it.
+- **Gmail labels ≡ Notion Tags** (same names). Gmail emails carry `labels` (now) and `decision.labels` (wanted); clickable chips on the row. For an email linked to a task the labels and the task's tags are one value — `syncTaskFromLabels` / `syncLabelsFromTags` keep them equal, `materializeDecisions` re-syncs before writing. Tag options everywhere = `labelOptions()` = `gmailLabels ∪ TAGS ∪ already-set`.
 - There is no "undecided" state — Confirm is always available.
 
 ## Tabs and per-group Confirm
 
 Two tabs: **Personal** (Outlook emails + tasks in any group except the shared one) and **Gabriel & Arina** (Gmail emails + tasks in that group). Each tab has its **own independent status** in `groups.<personal|shared> = { status, reviewedAt, processedAt }`: `pending-review` (editable) → `reviewed` (locked, awaiting save) or `skipped` (locked, save leaves it alone; **Reopen for review** puts it back to `pending-review`) → `processed` / `processed-with-errors` (reviewed groups only; tab shows its outcome summary). The sticky bar shows counts for the current tab; **Confirm & Save — <tab>** / **Skip — <tab>** set that group's status, write the whole file (`writeGroupStatus()`, the only write path), and lock that tab. The other tab is untouched and stays editable — no neutralisation, no `skippedGroups` key.
 
-The save skill runs only once neither group is `pending-review`, then processes exactly the groups whose status is `reviewed`. The top-level `status` is a derived summary (`aggregateStatus()`) that nothing keys off. `ensureGroups()` migrates legacy files (`status` / `reviewedGroups`, including an orphan `reviewedGroups.<tab>` stamp next to a `pending-review` `groups.<tab>`) on load and drops `reviewedGroups`.
+The save skill runs only once neither group is `pending-review`, then processes exactly the groups whose status is `reviewed`. **There is no session-level `status`** — the two group statuses are the only ones, and `groups` has exactly the keys `personal` / `shared`. `ensureGroups()` migrates legacy files (`status` / `reviewedGroups` / `skippedGroups` / `processedAt`, including an orphan `reviewedGroups.<tab>` stamp next to a `pending-review` `groups.<tab>`) on load, then deletes those keys and any extra group.
 
 ## File contract rules
 
