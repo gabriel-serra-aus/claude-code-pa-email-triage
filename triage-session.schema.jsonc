@@ -13,15 +13,23 @@
 //  JSON, mutate only the keys you own, write the whole JSON back — never drop a
 //  key you don't understand.
 //
+//  ─── Tasks live in Google Tasks / Microsoft To Do — there is NO Notion ──────
+//  One backend per mailbox, no cross-posting and no list picking:
+//     Gmail (Gabriel & Arina) → Google Tasks, default list   (provider "gtasks")
+//     Outlook                 → Microsoft To Do, default list (provider "todo")
+//  A task's IDENTITY is its `key` = "<provider>:<listId>:<taskId>". Emails point
+//  at one with `existingTaskKey`. `url` is an optional display link and may be
+//  null. There are no groups and no task tags anywhere in this file.
+//
 //  ─── Groups / tabs (exactly two — there is NO session-level status) ─────────
 //  The file holds two independent review queues ("groups"). Each has its own
 //  status; nothing else in the file carries a status. `groups` has exactly the
-//  keys "personal" and "shared" — never a third one.
+//  keys "gabriel" and "gabriel-arina" — never a third one.
 //
-//     group key   | tab label         | which emails            | which tasks
-//     ------------+-------------------+-------------------------+-------------------------------------
-//     "personal"  | Personal          | source !== "gmail"      | group !== "Gabriel & Arina"
-//     "shared"    | Gabriel & Arina   | source === "gmail"      | group === "Gabriel & Arina"
+//     group key       | tab label       | which emails          | which tasks
+//     ----------------+-----------------+-----------------------+---------------------
+//     "gabriel"       | Gabriel         | source !== "gmail"    | provider === "todo"
+//     "gabriel-arina" | Gabriel & Arina | source === "gmail"    | provider === "gtasks"
 //
 //  Group status lifecycle (one per group):
 //     "pending-review"        → written by step 1; the tab is editable on the page
@@ -32,25 +40,45 @@
 //  "skipped" groups stay "skipped" forever (step 3 never touches them).
 //  Step 3 refuses to run while EITHER group is still "pending-review".
 //
+//  ─── Threads: one row per conversation ─────────────────────────────────────
+//  For every thread with at least one message in the inbox, step 1 writes EVERY
+//  message of that thread into emails[], each with:
+//     threadId    Gmail threadId / Outlook conversationId
+//     threadRole  "head" (exactly one per thread — the NEWEST message) | "child"
+//     inInbox     false = already archived; it is NEVER moved back to the inbox
+//  `category`, `suggestedTask`, `existingTaskKey` and `newInThread` are HEAD-ONLY
+//  — there is never more than one task per thread. The page shows only the head
+//  as an interactive row (children are collapsed, muted and read-only) and
+//  DERIVES every child decision from the head's action:
+//
+//     head's action                              | child action                | child flagged
+//     -------------------------------------------+-----------------------------+--------------
+//     flag / create-task / update-task           | "flag" if inInbox, else     | false
+//                                                | "archive"                   |
+//     archive / complete-task / cancel-task      | "archive"                   | false
+//
+//  Only the head is ever starred. Counts and filters on the page are per thread.
+//
 //  ─── Fixed vocabularies ─────────────────────────────────────────────────────
-//  groups   : "Work" | "Personal" | "Gabriel & Arina" | "New Ideas"
-//  tags     : base list "Admin" | "Finance" | "Health" | "Property" | "Dev" | "Research" | "Errand"
-//             PLUS every Gmail user label (see "Gmail labels ≡ Notion Tags" below)
-//  category : "Important" | "FYI" | "Not Important"
-//  emailAction (non-tracked email — chosen from the category):
+//  provider : "gtasks" | "todo"
+//  category : "Important" | "FYI" | "Not Important"        (heads only)
+//  emailAction (non-tracked head — chosen from the category):
 //             Not Important → "archive"                              (locked)
 //             FYI           → "archive" (default) | "flag"
 //             Important     → "create-task" (default) | "flag" | "archive"
-//  emailAction (tracked email, i.e. existingTaskUrl set — no category):
+//  emailAction (tracked head, i.e. existingTaskKey set — no category):
 //                             "update-task" (default) | "complete-task" | "cancel-task"
+//             …unless the matched task is already `status: "completed"`, in which
+//             case "archive" is the ONLY action and nothing is written to the task.
+//  emailAction (child): derived, never chosen — "flag" | "archive" (table above).
 //
 //  What each emailAction means for step 3 — the action decides INBOX vs ARCHIVE only:
 //     "archive"        archive the email                                   (leaves inbox)
 //     "flag"           keep the email in the inbox (page label: "Keep in inbox")
-//     "create-task"    create Notion task from  decision.task ?? suggestedTask ; keep in inbox
+//     "create-task"    create decision.task ?? suggestedTask in the mailbox's task app; keep in inbox
 //     "update-task"    apply existingTasks[].decision.edits of the matched task; keep in inbox
-//     "complete-task"  set matched task to Done       AND archive the email
-//     "cancel-task"    set matched task to Cancelled  AND archive the email
+//     "complete-task"  complete the matched task      AND archive the thread
+//     "cancel-task"    complete the matched task with a "Cancelled …" note line AND archive the thread
 //  Every email therefore ends up either in the inbox or archived.
 //  Never delete an email, never reply, never draft.
 //
@@ -60,75 +88,78 @@
 //   • It is independent of the action: an archived email may stay starred, an
 //     inbox email may be unstarred. Page default = isFlagged; choosing a
 //     keep-in-inbox action ("flag" / "create-task" / "update-task") switches it ON
-//     as a convenience, Gabriel can toggle it back.
+//     as a convenience, Gabriel can toggle it back. Children are always false —
+//     only the head of a thread carries the star.
 //   • Step 3: flagged !== isFlagged → Gmail add/remove STARRED, Outlook flag_email
 //     "flagged" / "notFlagged"; equal → nothing. Applied for every action, after
 //     the archive/keep step. Outcome "starred" | "unstarred" | "flagged" | "unflagged".
 //
-//  ─── Gmail labels ≡ Notion Tags ─────────────────────────────────────────────
-//  Gmail (shared mailbox) labels and the Notion "Tags" multi-select share ONE
-//  namespace: identical names, character for character.
+//  ─── Gmail labels are EMAIL-ONLY ────────────────────────────────────────────
 //   • Step 1 records the USER-CREATED labels only (never system labels such as
 //     INBOX, UNREAD, STARRED, IMPORTANT, SENT, DRAFT, SPAM, TRASH, CATEGORY_*):
 //       - `gmailLabels`      = every user label that exists in the mailbox
 //       - `emails[].labels`  = the user labels currently on that email
-//     and sets `suggestedTask.tags = labels` for Gmail suggestions.
-//   • Step 2 lets Gabriel toggle labels on the email (`decision.labels`) and
-//     edit tags on the task. For a Gmail email linked to a task (create-task or
-//     tracked) the two are ONE value — the page copies whichever side was
-//     edited last onto the other, so in the written file
-//     decision.labels == (decision.task ?? suggestedTask).tags  (create-task)
-//     decision.labels == existingTask tags after decision.edits (tracked).
-//   • Step 3 applies BOTH sides of every reviewed Gmail email:
-//       - Gmail:  add    = decision.labels − labels
-//                 remove = labels − decision.labels
-//         (create a missing Gmail label first; do this for every action, archive included)
-//       - Notion: write the task tags as usual (decision.task.tags / suggestedTask.tags /
-//         decision.edits.tags), creating any missing option on the Tags property first.
-//   • `systemLabels` (step 1, gmail): every OTHER label on the message — the
-//     Gmail system labels such as IMPORTANT, UNREAD, CATEGORY_UPDATES,
-//     CATEGORY_PROMOTIONS … — EXCEPT INBOX and STARRED, which are modelled by the
-//     action and decision.flagged. Read-only: shown muted on the page, never
-//     edited by the page, never written back to Gmail by step 3.
+//   • Step 2 lets Gabriel toggle labels on the email (`decision.labels`); the page
+//     offers gmailLabels ∪ whatever is already set. They mirror NOTHING on a task.
+//   • Step 3 applies the diff to the message only: add = decision.labels − labels,
+//     remove = labels − decision.labels (creating a missing Gmail label first).
+//   • `systemLabels` (step 1, gmail): every OTHER label on the message — EXCEPT
+//     INBOX and STARRED, which are modelled by the action and decision.flagged.
+//     Read-only: shown muted on the page, never edited, never written back.
 //   • Outlook emails have no labels: `labels` / `systemLabels` / `decision.labels` are absent.
+//   • Their ONE task-side effect is the title PREFIX a new task is created with
+//     (case-insensitive, creation only, never re-applied to an existing task):
+//         properties/mount st    → "Mount: <title>"
+//         properties/arura st    → "Arura: <title>"
+//         properties/St Huberts  → "Huberts: <title>"
+//
+//  ─── Task descriptions: two sections, plain text ────────────────────────────
+//     -- notes
+//     <Gabriel's own text, typed in the task itself. Step 1 READS it and takes it
+//      into account; nothing ever rewrites it. The page lets Gabriel edit exactly
+//      this half.>
+//
+//     -- auto --
+//     One line: what this is and what needs to be done.
+//     26 Aug — one dated line per message of the thread, oldest first, newest 10
+//     Latest email: <deep link to the NEWEST message of the thread>
+//     [triage] thread=<threadId> src=gmail|outlook
+//
+//  Everything below `-- auto --` is regenerated by step 1 on every run; the page
+//  shows it read-only. The `[triage]` footer is how the next run re-finds the task
+//  (Google Tasks has no custom fields); on To Do it is mirrored into
+//  linkedResources[0].externalId. Plain text, no markdown — Google Tasks has no
+//  formatting. `decision.edits.notes` is always the WHOLE new description.
 //
 //  Other hard rules:
-//   • Gmail-sourced tasks (suggestedTask / decision.task of a gmail email) are
-//     ALWAYS group "Gabriel & Arina"; Outlook-sourced ones NEVER are.
-//   • existingTaskUrl, when set, must equal the url of one existingTasks[] entry.
-//   • Task descriptions (notes): everything ABOVE the literal line
-//         -- auto comment --
-//     is Gabriel's own text and must never be modified. Everything BELOW is
-//     Claude's briefing — one "DD Mon: summary" line per email matched to the
-//     task — and is regenerated on every run. Step 3 writes edits.notes as a
-//     whole string; the page has already built it with this split preserved.
+//   • A task TITLE is written once, at creation. It is never renamed afterwards —
+//     Gabriel may have renamed it himself — so there is no `title` key in `edits`
+//     and the page shows the title of an existing task read-only.
+//   • existingTaskKey, when set, must equal the `key` of one existingTasks[] entry.
+//   • An already-completed task is read-only end to end: no edits, no reopen.
 // =============================================================================
 {
   // ── Session-level ───────────────────────────────────────────────────────
   // Step 1. ISO-8601 timestamp of when the triage ran. The page shows its age.
-  "generatedAt": "2026-08-29T08:00:00.000Z",
+  "generatedAt": "2026-08-31T08:00:00.000Z",
 
   // Step 1 (informational). Which mailboxes were actually fetched this run —
   // e.g. ["outlook"] when the Gmail connector was down. The page ignores it.
   "mailboxes": ["outlook", "gmail"],
 
-  // Step 1. All USER-CREATED labels of the shared Gmail (system labels excluded).
-  // The page offers these (plus the base tags) as toggles on Gmail emails and as
-  // tag checkboxes in the task editor.
-  "gmailLabels": ["Travel", "House", "Kids"],
+  // Step 1. All USER-CREATED labels of the Gabriel & Arina Gmail (system labels excluded).
+  // The page offers these as toggles on Gmail email rows.
+  "gmailLabels": ["Travel", "properties/mount st", "properties/St Huberts"],
 
   // Per-group status — THE thing step 3 keys off. Exactly two keys. Step 1 must
-  // write both as "pending-review" (the page will create them if missing).
-  // NOTE: there is deliberately no top-level "status" key; if one is found in an
-  // old file the page deletes it (together with reviewedGroups / skippedGroups /
-  // top-level processedAt) after migrating it into `groups`.
+  // write both as "pending-review". There is deliberately no top-level "status".
   "groups": {
-    "personal": {
+    "gabriel": {
       "status": "pending-review",   // see lifecycle above
       "reviewedAt": null,           // step 2: ISO timestamp of Confirm or Skip on this tab (null again after Reopen)
       "processedAt": null           // step 3: ISO timestamp when this group was applied
     },
-    "shared": {
+    "gabriel-arina": {
       "status": "pending-review",
       "reviewedAt": null,
       "processedAt": null
@@ -136,178 +167,169 @@
   },
 
   // ── Emails ──────────────────────────────────────────────────────────────
-  // Step 1 writes every field except `decision` (may be omitted; the page
-  // fills defaults) and `outcome` (step 3 only). REQUIRED from step 1:
-  // id, source, category, summary. One entry per inbox email considered.
+  // Step 1 writes every field except `decision` (may be omitted; the page fills
+  // it in) and `outcome` (step 3 only). REQUIRED from step 1 on every message:
+  // id, source, sourceId, from, subject, date, summary, isFlagged, threadId,
+  // threadRole, inInbox — plus, on heads only, category / existingTaskKey /
+  // suggestedTask / newInThread. Every message of an inbox thread is listed.
   "emails": [
     {
-      // Mailbox message id. Used for the deep link on the page AND by step 3 to
-      // act on the email (archive / flag / labels), so it must be the real id for that source.
-      "id": "AAMkAGI2...",
-      "source": "outlook",          // "outlook" → Personal tab · "gmail" → Gabriel & Arina tab
-      "sourceId": "outlook:AAMkAGI2...",   // step 1: "<source>:<id>"; becomes the Notion "Source ID" property (duplicate check in step 3)
-      "from": "Jane Doe <jane@example.com>",
-      "subject": "Rates notice due 15 Sep",
-      "date": "2026-08-28T22:14:00.000Z",
-      "summary": "Council rates $612 due 15 Sep; pay via BPAY.",   // Claude's 1-2 line summary; also feeds the auto comment
-      "isFlagged": false,           // step 1: current flag (Outlook) / star (Gmail) state
-      // (no `labels` / `systemLabels` keys: Outlook email)
+      // ── A tracked GMAIL head (newest message of its thread) ──
+      // Mailbox message id: the deep link on the page AND what step 3 acts on
+      // (archive / star / labels), so it must be the real id for that source.
+      "id": "18f3a2b9c0d1e999",
+      "source": "gmail",            // "gmail" → gabriel-arina tab · "outlook" → gabriel tab
+      "sourceId": "gmail:18f3a2b9c0d1e999",   // "<source>:<id>"
+      "from": "Arina <arina@example.com>",
+      "subject": "Re: Mount St plumber quote",
+      "date": "2026-08-31T03:40:00.000Z",
+      "summary": "Quote v2 arrived, $1,240, needs approval by Friday.",  // 1-2 lines; also feeds the auto block
+      "isFlagged": true,            // step 1: current star (Gmail) / flag (Outlook) state
+      "labels": ["properties/mount st"],   // step 1: USER labels on the email right now (editable)
+      "systemLabels": ["IMPORTANT"],       // step 1: the rest, minus INBOX/STARRED (read-only)
+
+      "threadId": "18f3a2b9c0d1e000",      // gmail threadId / outlook conversationId
+      "threadRole": "head",                // exactly one head per thread — the newest message
+      "inInbox": true,                     // false = already archived; never un-archive
+      "newInThread": true,                 // head only: newer than the message the task points at (page badge)
 
       // Step 1's classification; Gabriel can change it on the page. Drives the
-      // default emailAction. Ignored (not shown) when existingTaskUrl is set.
+      // default emailAction. Absent on children; unused when tracked.
       "category": "Important",
 
-      // null for a NEW topic. Set to the Notion url of a matching open task to
-      // mark the email as "tracked" — it then only offers update/complete/cancel.
-      "existingTaskUrl": null,
+      // null for a NEW topic. Set to the `key` of a matching task to mark the
+      // thread as "tracked" — it then only offers update/complete/cancel.
+      "existingTaskKey": "gtasks:MTIz:abc789",
 
-      // Step 1's proposed task for Important emails (null when nothing to suggest,
-      // and always null for tracked emails). Same shape as decision.task.
-      "suggestedTask": {
-        "title": "Pay council rates ($612)",
-        "notes": "BPAY, due 15 Sep. See email.",
-        "group": "Personal",        // fixed list; Gmail emails → must be "Gabriel & Arina"
-        "tags": ["Finance", "Admin"],// base tags ∪ Gmail labels, 0..n; Gmail emails → must equal `labels`
-        "dueDate": "2026-09-15",    // "YYYY-MM-DD" or "" for none
-        "link": "https://outlook.live.com/mail/0/inbox/id/AAMkAGI2..."   // email deep link, stored on the task
-      },
+      // Step 1's proposed task for Important heads (null when nothing to suggest,
+      // and always null for tracked heads). Same shape as decision.task.
+      "suggestedTask": null,
 
       // Step 2 (the page) owns this block. Step 1 may omit it entirely.
       "decision": {
-        "emailAction": "create-task",   // vocabulary above; ALWAYS one of the allowed values for this email
-        "isTask": true,                 // derived: emailAction === "create-task". Never read it, read emailAction.
-        "flagged": true,                // step 2: wanted flag/star state (see header). Step 3 diffs vs isFlagged.
-        // Gabriel's edited copy of the task to create. null means "use suggestedTask
-        // unchanged". When emailAction is "create-task" the page guarantees that at
-        // least one of decision.task / suggestedTask is non-null (it builds a
-        // fallback from subject + summary if neither existed).
-        // Always null when emailAction !== "create-task".
+        "emailAction": "update-task",   // vocabulary above; ALWAYS one of the allowed values for this email
+        "isTask": false,                // derived: emailAction === "create-task". Never read it, read emailAction.
+        "flagged": true,                // step 2: wanted star/flag state (see header). Step 3 diffs vs isFlagged.
+        "labels": ["properties/mount st"],  // step 2, gmail only: wanted USER labels (step 3 diffs vs `labels`)
+        // Gabriel's edited copy of the task to create. null means "use
+        // suggestedTask unchanged", and it is always null unless the action is
+        // "create-task" (for which the page guarantees one of the two exists).
         "task": null
       },
 
       // Step 3 only — the page never writes it and shows it read-only in the
-      // processed summary. A short human string, e.g. "archived",
-      // "flagged", "task created", "task updated", "labels +Travel −House",
-      // "FAILED: <reason>" (anything matching /fail/i is shown red). Absent until processed.
-      "outcome": "task created"
+      // processed summary. A short human string, e.g. "archived", "starred",
+      // "task created", "task updated", "task already completed",
+      // "labels +Travel −House", "FAILED: <reason>" (anything matching /fail/i
+      // is shown red). Absent until processed.
+      "outcome": "task updated"
     },
     {
-      // ── A GMAIL email that becomes a new task ──
-      "id": "18f3a2b9c0d1e2f3",
+      // ── A CHILD of that same thread: read-only on the page ──
+      // No category, no suggestedTask, no existingTaskKey, no newInThread.
+      "id": "18f3a2b9c0d1e000",
       "source": "gmail",
-      "sourceId": "gmail:18f3a2b9c0d1e2f3",
-      "from": "TAP Air Portugal <noreply@flytap.com>",
-      "subject": "Fare alert: Lisbon 12 Oct",
-      "date": "2026-08-29T01:10:00.000Z",
-      "summary": "Fare alert for Lisbon 12 Oct at $1,450 return.",
+      "sourceId": "gmail:18f3a2b9c0d1e000",
+      "from": "Plumber <ana@example.com>",
+      "subject": "Mount St plumber quote",
+      "date": "2026-08-26T21:05:00.000Z",
+      "summary": "First quote, $1,480, not itemised.",
       "isFlagged": false,
-      "labels": ["Travel"],          // step 1: USER labels on the email right now (editable, == task tags)
-      "systemLabels": ["IMPORTANT", "CATEGORY_UPDATES", "UNREAD"],   // step 1: the rest, minus INBOX/STARRED (read-only)
+      "labels": ["properties/mount st"],
+      "systemLabels": [],
+      "threadId": "18f3a2b9c0d1e000",
+      "threadRole": "child",
+      "inInbox": false,             // already archived → its action can only be "archive"
+      "decision": {
+        "emailAction": "archive",   // DERIVED from the head (page), never chosen by Gabriel
+        "isTask": false,
+        "flagged": false,           // children are never starred
+        "labels": ["properties/mount st"],
+        "task": null
+      }
+    },
+    {
+      // ── An OUTLOOK head that becomes a NEW task ──
+      "id": "AAMkAGI2...",
+      "source": "outlook",
+      "sourceId": "outlook:AAMkAGI2...",
+      "from": "Council <rates@council.gov.au>",
+      "subject": "Rates notice due 15 Sep",
+      "date": "2026-08-28T22:14:00.000Z",
+      "summary": "Council rates $612 due 15 Sep; pay via BPAY.",
+      "isFlagged": false,
+      // (no labels / systemLabels keys: Outlook email)
+      "threadId": "AAQkAGI2...",
+      "threadRole": "head",
+      "inInbox": true,
       "category": "Important",
-      "existingTaskUrl": null,
+      "existingTaskKey": null,
       "suggestedTask": {
-        "title": "Check Lisbon fare $1,450 (12 Oct)",
-        "notes": "TAP alert — compare with Qantas.",
-        "group": "Gabriel & Arina",  // forced for Gmail
-        "tags": ["Travel"],          // == labels (step 1 rule)
-        "dueDate": "",
-        "link": "https://mail.google.com/mail/u/0/#inbox/18f3a2b9c0d1e2f3"
+        "title": "Huberts: Pay council rates ($612)",   // prefix already applied by step 1
+        "notes": "-- notes\n\n-- auto --\nPay $612 by BPAY before 15 Sep.\n28 Aug — rates notice issued\nLatest email: https://outlook.live.com/mail/0/inbox/id/AAMkAGI2...\n[triage] thread=AAQkAGI2... src=outlook",
+        "dueDate": "2026-09-15",    // "YYYY-MM-DD" or "" for none
+        "link": "https://outlook.live.com/mail/0/inbox/id/AAMkAGI2..."   // deep link to the HEAD
       },
       "decision": {
         "emailAction": "create-task",
         "isTask": true,
-        "flagged": true,                      // create-task switched it on; Gabriel left it on
-        // Gabriel added the "House" label on the page → the task's tags follow,
-        // so the page wrote an edited copy of the task with the same tags.
-        "labels": ["Travel", "House"],        // step 2: desired Gmail labels after save (step 3 diffs vs `labels`)
-        "task": {
-          "title": "Check Lisbon fare $1,450 (12 Oct)",
-          "notes": "TAP alert — compare with Qantas.",
-          "group": "Gabriel & Arina",
-          "tags": ["Travel", "House"],        // == decision.labels
-          "dueDate": "",
-          "link": "https://mail.google.com/mail/u/0/#inbox/18f3a2b9c0d1e2f3"
-        }
-      }
-    },
-    {
-      // ── A TRACKED Gmail email: already has a Notion task ──
-      "id": "18f3a2b9c0d1e999",
-      "source": "gmail",
-      "sourceId": "gmail:18f3a2b9c0d1e999",
-      "from": "Arina <arina@example.com>",
-      "subject": "Re: Flights to Lisbon",
-      "date": "2026-08-29T03:40:00.000Z",
-      "summary": "Arina prefers the 12 Oct departure; asks to book by Friday.",
-      "isFlagged": true,
-      "labels": ["Travel"],
-      "systemLabels": ["IMPORTANT"],
-      "category": "Important",    // present but not shown/used for tracked emails
-      "existingTaskUrl": "https://www.notion.so/Book-Lisbon-flights-1a2b3c4d",   // must match existingTasks[].url
-      "suggestedTask": null,
-      "decision": {
-        "emailAction": "update-task",   // update-task | complete-task | cancel-task only
-        "isTask": false,
-        "flagged": false,               // Gabriel unstarred it on the page although it stays in the inbox
-        "labels": ["Travel", "Errand"], // Gabriel toggled "Errand" → mirrored into the task's decision.edits.tags below
-        "task": null
+        "flagged": true,
+        "task": null                // Gabriel edited nothing → suggestedTask is created as-is
       }
     }
   ],
 
-  // ── Existing Notion tasks ───────────────────────────────────────────────
-  // Step 1 writes the OPEN Notion tasks it considered relevant (at least every
-  // task referenced by an existingTaskUrl, ideally all open tasks so Gabriel
-  // can complete/edit them from the page). Step 1 writes every field except
-  // `decision` (page) and `outcome` (step 3). Values must be the CURRENT Notion
-  // values — the page diffs against them and only records changed fields.
+  // ── Existing tasks (Google Tasks / Microsoft To Do) ─────────────────────
+  // Step 1 writes the open (and recently completed) tasks it fetched — at least
+  // every task referenced by an existingTaskKey. Step 1 writes every field
+  // except `decision` (page) and `outcome` (step 3). Values must be the CURRENT
+  // backend values — the page diffs against them and records only what changed.
   "existingTasks": [
     {
-      "url": "https://www.notion.so/Book-Lisbon-flights-1a2b3c4d",   // Notion page url = the task's identity
-      "title": "Book Lisbon flights",
-      // Full description as in Notion. Gabriel's text above the marker, Claude's
-      // dated briefing below it (see hard rules). May have no marker yet.
-      "notes": "Compare TAP vs Qantas.\n-- auto comment --\n27 Aug: Arina asked for options before 15 Oct.",
-      "status": "Not started",     // Notion status as-is (informational)
-      "group": "Gabriel & Arina",  // fixed list; decides the tab this task appears in
-      "tags": ["Travel"],          // current Notion tags (names shared with Gmail labels)
-      "dueDate": "2026-09-05",     // "YYYY-MM-DD" or ""
-      // Step 1 extras copied from Notion (Link / Source / Source ID properties).
-      // Informational; the page preserves them untouched, step 3 does not need them.
-      "link": "https://mail.google.com/mail/u/0/#inbox/18f2...",
-      "source": "Gmail (G&A)",     // Notion Source option: "Outlook" | "Gmail (G&A)" | "Manual"
-      "sourceId": "gmail:18f2...",
+      "key": "gtasks:MTIz:abc789",   // "<provider>:<listId>:<taskId>" — THE identity
+      "provider": "gtasks",          // "gtasks" | "todo" — also decides the tab
+      "listId": "MTIz",
+      "listName": "My Tasks",
+      "url": null,                   // optional display link; may be null (the page then shows plain text)
+      "title": "Mount: plumber quote",   // READ-ONLY after creation — never renamed, no `title` in edits
+      // The live description, both sections (see the header for the format).
+      "notes": "-- notes\nAsk about the water damage too.\n\n-- auto --\n27 Aug — quote requested\nLatest email: https://mail.google.com/mail/u/0/#inbox/18f2...\n[triage] thread=18f3a2b9c0d1e000 src=gmail",
+      "status": "needsAction",       // "needsAction" | "completed" — a completed task is read-only everywhere
+      "dueDate": "2026-09-05",       // "YYYY-MM-DD" or ""
+      "link": "https://mail.google.com/mail/u/0/#inbox/18f2...",   // the message the task currently points at
+      "threadId": "18f3a2b9c0d1e000",   // parsed from the [triage] footer
 
       // Step 2 owns this block. Step 1 may omit it.
       "decision": {
-        "complete": false,         // true ⇒ step 3 sets the task to Done      (mirrors emailAction "complete-task")
-        "cancel": false,           // true ⇒ step 3 sets the task to Cancelled (mirrors emailAction "cancel-task")
-        // null = nothing changed. Otherwise ONLY the fields that differ from the
-        // values above are present; step 3 applies exactly these.
-        // `notes` is the full new description (Gabriel's part + refreshed auto comment).
-        // `tags` here == decision.labels of every Gmail email tracked by this task.
+        "complete": false,         // true ⇒ mark the task completed  (mirrors emailAction "complete-task")
+        "cancel": false,           // true ⇒ same, plus a "Cancelled DD Mon: …" line (mirrors "cancel-task")
+        // null = nothing changed. Otherwise ONLY the keys that differ from the
+        // values above; step 3 applies exactly these. There is no `title` key.
         "edits": {
-          "notes": "Compare TAP vs Qantas.\n-- auto comment --\n27 Aug: Arina asked for options before 15 Oct.\n29 Aug: Arina prefers the 12 Oct departure; asks to book by Friday.",
-          "tags": ["Travel", "Errand"],
-          "dueDate": "2026-09-04"
+          // Full new description: Gabriel's -- notes section + the -- auto -- block, unchanged.
+          "notes": "-- notes\nAsk about the water damage too.\nAnd the gutter.\n\n-- auto --\n27 Aug — quote requested\nLatest email: https://mail.google.com/mail/u/0/#inbox/18f2...\n[triage] thread=18f3a2b9c0d1e000 src=gmail",
+          "dueDate": "2026-09-04",
+          // Repointed at the newest message of the thread. The page defaults this
+          // whenever the head is `newInThread`; step 3 rewrites the "Latest email:"
+          // line with it (and, on To Do, linkedResources[0].webUrl).
+          "link": "https://mail.google.com/mail/u/0/#inbox/18f3a2b9c0d1e999"
         }
       },
 
-      // Step 3 only, e.g. "updated", "completed", "cancelled", "untouched", "FAILED: …"
+      // Step 3 only, e.g. "updated", "completed", "cancelled", "untouched",
+      // "task already completed", "FAILED: …"
       "outcome": "updated"
     }
   ],
 
   // ── New tasks added by Gabriel on the page ──────────────────────────────
   // Step 1 writes an empty array (or omits it). Step 2 appends. Step 3 creates
-  // each one in Notion; the tab a task belongs to is decided by its `group`.
-  // No source restriction applies (typed by hand, not derived from an email).
+  // each one in the backend named by `provider`, which also decides its tab.
   "newTasks": [
     {
       "title": "Renew passport",
-      "notes": "Expires Feb 2027 — book appointment.",
-      "group": "Personal",
-      "tags": ["Admin"],
+      "notes": "-- notes\nExpires Feb 2027 — book appointment.\n\n-- auto --",
+      "provider": "todo",         // "gtasks" | "todo" — the tab it was added from
       "dueDate": "",
       "outcome": "created"        // step 3 only
     }
@@ -319,52 +341,63 @@
 // =============================================================================
 //
 //  STEP 1 — pa-email-triage (creates the file; overwrite any previous session)
-//    • generatedAt; groups = { personal: {…pending…}, shared: {…pending…} } — exactly
+//    • generatedAt; groups = { gabriel: {…}, "gabriel-arina": {…} }, both pending — exactly
 //      those two keys, each { status: "pending-review", reviewedAt: null, processedAt: null }.
 //      NO top-level status key.
-//    • gmailLabels: every user-created label of the shared Gmail.
+//    • gmailLabels: every user-created label of the Gabriel & Arina Gmail.
 //    • mailboxes: which connectors were fetched.
-//    • emails[] (id, source, sourceId, from, subject, date, summary, isFlagged,
-//      category, existingTaskUrl | null, suggestedTask | null;
-//      gmail only: labels = user labels, systemLabels = all other labels minus
-//      INBOX/STARRED) — no decision / outcome.
+//    • emails[]: EVERY message of every thread that has at least one inbox
+//      message — id, source, sourceId, from, subject, date, summary, isFlagged,
+//      threadId, threadRole ("head" = newest, one per thread), inInbox; gmail
+//      only: labels = user labels, systemLabels = all other labels minus
+//      INBOX/STARRED. HEADS also get category, existingTaskKey | null,
+//      suggestedTask | null and newInThread. No decision / outcome.
 //      isFlagged: Gmail = message has STARRED; Outlook = flagStatus "flagged".
-//    • existingTasks[] with current Notion values (incl. tags, link, source,
-//      sourceId) — no decision / outcome
+//    • existingTasks[] from Google Tasks + Microsoft To Do with current values
+//      (key, provider, listId, listName, url | null, title, notes, status,
+//      dueDate, link, threadId parsed from the [triage] footer) — no decision /
+//      outcome. Match a task to a head by that threadId.
 //    • newTasks: []
-//    • Gmail suggestions: group "Gabriel & Arina" and tags == labels.
+//    • Task notes: read the `-- notes` section, keep it byte-for-byte, and
+//      regenerate everything below `-- auto --` (timeline + latest-email link +
+//      [triage] footer). New tasks get an empty `-- notes` section and a title
+//      that already carries the properties/* prefix.
 //
 //  STEP 2 — triage-review.html (mutates in place, per tab)
-//    • Fills every emails[].decision (incl. decision.labels for gmail) and
-//      existingTasks[].decision, appends newTasks. Keeps Gmail labels and the
-//      linked task's tags identical.
+//    • Fills every emails[].decision (incl. decision.labels for gmail and the
+//      DERIVED decisions of every child) and existingTasks[].decision, appends
+//      newTasks. Only heads are interactive; only the `-- notes` half of a
+//      description is editable; a task title is never written.
 //    • Confirm & Save on a tab: groups.<tab> = { status: "reviewed", reviewedAt: now,
 //      processedAt: null } for THAT TAB ONLY, then writes the whole file.
 //      Skip on a tab: same with status "skipped". Reopen (skipped → pending) sets
 //      reviewedAt back to null. The other tab is never touched.
 //    • Refuses to write if groups.<tab>.status on disk is not what it last saw.
 //    • Never writes processedAt or any outcome field.
-//    • Migrates legacy files on load (top-level status / reviewedGroups /
-//      skippedGroups / processedAt → groups, then deletes those keys; any group
-//      other than personal / shared is dropped).
+//    • Assumes a file written by the current step 1 — there is no migration and
+//      no backwards compatibility.
 //
 //  STEP 3 — pa-email-triage-save (mutates in place, per group)
-//    • GATE: if groups.personal.status or groups.shared.status is "pending-review",
+//    • GATE: if groups.gabriel.status or groups["gabriel-arina"].status is "pending-review",
 //      stop and change nothing — Gabriel must Confirm or Skip every tab first.
 //    • For EACH group whose groups.<g>.status === "reviewed":
-//        – emails of that group: perform decision.emailAction (table above);
-//          for "create-task" create decision.task ?? suggestedTask in Notion
-//          (Status "Not started", Link, Source, Source ID = email.sourceId; if a
-//          task with that Source ID already exists → outcome "skipped-duplicate").
-//          Then star/flag: decision.flagged !== isFlagged → Gmail STARRED add/remove
-//          or Outlook flag_email; every action, archived emails included.
-//          Gmail emails: also apply the USER label diff (labels → decision.labels);
-//          never touch systemLabels.
+//        – emails of that group: perform decision.emailAction (table above).
+//          For "create-task" create decision.task ?? suggestedTask in that
+//          mailbox's task app (Google Tasks for gmail, To Do for outlook).
+//          Then star/flag: decision.flagged !== isFlagged → Gmail STARRED
+//          add/remove or Outlook flag_email; every action, archived emails
+//          included. Gmail emails: also apply the USER label diff (labels →
+//          decision.labels); never touch systemLabels. An email with inInbox
+//          false is never moved back to the inbox.
 //        – existingTasks of that group: apply decision.edits (only the keys
-//          present; create missing Tags options first), then
-//          decision.complete → Done / decision.cancel → Cancelled.
-//        – newTasks of that group: create in Notion.
-//        – stamp `outcome` on every item touched (string; put "FAILED: …" on errors).
+//          present — notes / dueDate / link; never a title), then
+//          decision.complete → completed, decision.cancel → completed plus a
+//          "Cancelled DD Mon: …" line in the auto block. A task whose status is
+//          already "completed" is left alone.
+//        – newTasks of that group: create in the backend named by `provider`.
+//        – re-read the live task before writing so a `-- notes` section Gabriel
+//          typed since the fetch survives, and always keep the [triage] footer.
+//        – stamp `outcome` on every item touched (string; "FAILED: …" on errors).
 //        – set groups.<g>.status = "processed" (or "processed-with-errors" if any
 //          item failed) and groups.<g>.processedAt = now.
 //    • Never touch a "skipped" group (leave its status "skipped") or one that is
