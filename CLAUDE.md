@@ -61,6 +61,14 @@ The save skill runs only once neither group is `pending-review`, then processes 
 - **No backwards compatibility.** `applyLoadDefaults()` fills in only what step 1 may omit (the `decision` blocks, `existingTasks`, `newTasks`) — there is no legacy handling and no migration path anywhere in the page.
 - The save skill must understand the action vocabulary above (`archive | flag | create-task | update-task | complete-task | cancel-task`).
 
+## Version stamp
+
+The page shows a build stamp in the header: `<span class="version" id="app-version">` inside the `<h1>`, format **`v<yyyy>.<MM>.<dd> - <HH>-<mm>`** (local time, 24-hour), e.g. `v2026.09.01 - 11-43`.
+
+- It is a **hardcoded string in the HTML** — nothing computes it at runtime, so it reflects when the page was last pushed, not when it is opened.
+- **Bump it only as part of a commit + push**, in the same commit as the change: set it to the local time at that moment (`date "+%Y.%m.%d - %H-%M"`), then commit and push. Never bump it on an edit that is not being pushed, and never bump it twice for one push.
+- If several changes are committed together, the stamp is set once, on that commit.
+
 ## Working on the page
 
 - One file, vanilla JS, CSS variables for light/dark (`--accent`, `--green`, `--muted`, etc. are defined in both `:root` and the dark block — define new colours in both).
