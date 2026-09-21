@@ -36,8 +36,8 @@ Child decisions are derived by `syncThread(head)` (called from `setAction` / `se
 
 The **category** is the one thing Gabriel decides and it drives the **action** (`decision.emailAction`), which is exactly what the save skill will do. Category and action are one-click icon ribbons (`ribbonHTML`), not dropdowns.
 
-- Non-tracked heads: Not Important → `archive` (locked); FYI → `archive` (default) | `flag`; Important → `create-task` (default) | `flag` | `archive`. Every email ends up kept in the inbox or archived — no leave-alone, no create-email. `flag` (label "Keep in inbox") / `create-task` / `update-task` keep it; `archive` / `complete-task` / `cancel-task` archive it.
-- Star/flag is a separate property: `decision.flagged` (toggle button per head, `flagBtnHTML`; default `isFlagged`, switched on by `setAction` for keep-in-inbox actions). The save skill diffs it against `isFlagged`. Gmail `systemLabels` are shown read-only (`prettyLabel`) and never written.
+- Non-tracked heads: Not Important → `archive` (locked); FYI → `flag` (default) | `archive`; Important → `create-task` (default) | `flag`. Every email ends up kept in the inbox or archived — no leave-alone, no create-email. `flag` (label "Keep in inbox") / `create-task` / `update-task` keep it; `archive` / `complete-task` / `cancel-task` archive it.
+- Star/flag is a separate property: `decision.flagged` (toggle pill beside the action ribbon, `flagBtnHTML`; default `isFlagged`). **No action ever changes it** — `flag` only means "keep in inbox", so an unflagged email kept in the inbox stays unflagged. The save skill diffs it against `isFlagged`. Gmail `systemLabels` are shown read-only (`prettyLabel`) and never written.
 - Heads with `existingTaskKey` ("tracked") show no category and get `trackedActions(e)`: `update-task` (default) | `complete-task` | `cancel-task`. Complete/cancel also archive the thread and are mirrored onto `existingTasks[].decision.complete` / `.cancel` (and back via the Open/Done/Cancelled select in the tasks section — both save as completed, Cancelled adds a note line).
 - A matched task with `status: "completed"` is read-only end to end (`isClosed`): "✓ task completed" badge, `archive` as the only action, its state select disabled, no edits, no reopen.
 - `decision.isTask` is derived (`emailAction === "create-task"`). An Important head without a suggestion gets a task built from subject + summary on Confirm (`fallbackTask`).
@@ -72,5 +72,6 @@ The page shows a build stamp in the header: `<span class="version" id="app-versi
 ## Working on the page
 
 - One file, vanilla JS, CSS variables for light/dark (`--accent`, `--green`, `--muted`, etc. are defined in both `:root` and the dark block — define new colours in both).
+- Responsive: three media blocks at the end of the stylesheet — `max-width: 960px` (email rows become date / email / category + action via grid areas on `.cell-date` `.cell-main` `.cell-cat` `.cell-action`), `max-width: 600px` (everything stacks, full-screen modal, scrolling filter bar) and `(hover: none), (pointer: coarse)` (bigger targets, label × always visible). Phones/iPads still can't run the page — no File System Access API there.
 - Quick syntax check after edits: extract the `<script>` body and run `node --check` on it.
 - `improvements.md` is the backlog + change log; add to it when making a deliberate UX change.

@@ -64,8 +64,8 @@
 //  category : "Important" | "FYI" | "Not Important"        (heads only)
 //  emailAction (non-tracked head — chosen from the category):
 //             Not Important → "archive"                              (locked)
-//             FYI           → "archive" (default) | "flag"
-//             Important     → "create-task" (default) | "flag" | "archive"
+//             FYI           → "flag" (default — keep in inbox) | "archive"
+//             Important     → "create-task" (default) | "flag"       (both keep it in the inbox)
 //  emailAction (tracked head, i.e. existingTaskKey set — no category):
 //                             "update-task" (default) | "complete-task" | "cancel-task"
 //             …unless the matched task is already `status: "completed"`, in which
@@ -74,7 +74,8 @@
 //
 //  What each emailAction means for step 3 — the action decides INBOX vs ARCHIVE only:
 //     "archive"        archive the email                                   (leaves inbox)
-//     "flag"           keep the email in the inbox (page label: "Keep in inbox")
+//     "flag"           keep the email in the inbox (page label: "Keep in inbox"). It does NOT
+//                      star/flag anything — that is decision.flagged, below.
 //     "create-task"    create decision.task ?? suggestedTask in the mailbox's task app; keep in inbox
 //     "update-task"    apply existingTasks[].decision.edits of the matched task; keep in inbox
 //     "complete-task"  complete the matched task      AND archive the thread
@@ -86,10 +87,10 @@
 //   • `isFlagged`        (step 1) = current state: Gmail has label STARRED / Outlook flagStatus "flagged"
 //   • `decision.flagged` (step 2) = wanted state after the save, for EVERY email (both mailboxes)
 //   • It is independent of the action: an archived email may stay starred, an
-//     inbox email may be unstarred. Page default = isFlagged; choosing a
-//     keep-in-inbox action ("flag" / "create-task" / "update-task") switches it ON
-//     as a convenience, Gabriel can toggle it back. Children are always false —
-//     only the head of a thread carries the star.
+//     inbox email may be unstarred. Page default = isFlagged; NO action ever
+//     changes it — only the star/flag toggle next to the action ribbon does, so
+//     "flag" (keep in inbox) on an unflagged email leaves it unflagged. Children
+//     are always false — only the head of a thread carries the star.
 //   • Step 3: flagged !== isFlagged → Gmail add/remove STARRED, Outlook flag_email
 //     "flagged" / "notFlagged"; equal → nothing. Applied for every action, after
 //     the archive/keep step. Outcome "starred" | "unstarred" | "flagged" | "unflagged".

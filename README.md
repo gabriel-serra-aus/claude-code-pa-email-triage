@@ -80,12 +80,12 @@ Light/dark toggle, remembered in `localStorage` (`triage-theme`).
 | Category | Actions (first = default) |
 |---|---|
 | Not Important | `archive` (locked) |
-| FYI | `archive` · `flag` |
-| Important | `create-task` · `flag` · `archive` |
+| FYI | `flag` (keep in inbox) · `archive` |
+| Important | `create-task` · `flag` (keep in inbox, no task) |
 
 Every email ends up either **kept in the inbox** or **archived** — there is no leave-alone and no create-email. `flag` (shown as "Keep in inbox"), `create-task` and `update-task` keep it in the inbox; `archive`, `complete-task` and `cancel-task` archive it.
 
-The **star (Gmail) / flag (Outlook) is its own property** — a toggle on each row that writes `decision.flagged` (default = the mailbox's current `isFlagged`; choosing a keep-in-inbox action switches it on as a convenience). It is independent of the action: an archived email can stay starred. Gmail rows also show the message's **system labels** (Important, Updates, Promotions…) as muted read-only chips next to the editable user labels.
+The **star (Gmail) / flag (Outlook) is its own property** — a toggle beside the action ribbon that writes `decision.flagged` (default = the mailbox's current `isFlagged`; no action ever changes it, so "Keep in inbox" leaves an unflagged email unflagged). It is independent of the action: an archived email can stay starred. Gmail rows also show the message's **system labels** (Important, Updates, Promotions…) as muted read-only chips next to the editable user labels.
 
 - `create-task` — the task created is `decision.task` (Gabriel's edit) → else `suggestedTask` (Claude's) → else a **fallback** from subject + summary, built on Confirm. **Edit task** opens the editor (title, description, group, tags, due date); **Reset** returns to the suggestion. The email deep link is carried on the task automatically.
 - `flag` / `archive` — nothing under the ribbon.
