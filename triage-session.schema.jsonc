@@ -1,17 +1,28 @@
 // =============================================================================
-//  triage-session.json — the ONE file shared by the three steps of the loop
+//  triage-session — the ONE session shared by the three steps of the loop
 // =============================================================================
 //
-//  Location:  D:\Gabriel\OneDrive\Claude\Workspace\Personal Assistance\email-triage\triage-session.json
+//  Location:  Netlify Blobs, store "triage", key "session" (step 1's work in
+//             progress is key "draft"). Only the Netlify Functions touch the
+//             store; there is no local file.
 //
-//  Step 1  pa-email-triage        (Cowork skill)  → CREATES the file
-//  Step 2  triage-review.html     (Gabriel)       → EDITS decisions; Confirm or Skip ONE GROUP at a time
-//  Step 3  pa-email-triage-save   (Cowork skill)  → once no group is pending, APPLIES every "reviewed" group
+//  Step 1  pa-email-triage        (Cowork skill)  → CREATES the session through the
+//          "triage-session" connector: session_begin → session_add_emails /
+//          session_add_tasks (≤ 25 per call) → session_publish
+//  Step 2  triage-review.html     (Gabriel)       → EDITS decisions via GET /api/session and
+//          PUT /api/session (If-Match); Confirm or Skip ONE GROUP at a time
+//  Step 3  pa-email-triage-save   (Cowork skill)  → once no group is pending, APPLIES every
+//          "reviewed" group: session_status → session_get_work → session_record_outcomes →
+//          session_finish_group
 //
 //  This is an annotated example, not a formal JSON Schema. Every key is listed
-//  with WHO writes it. The general rule for all three steps: load the whole
-//  JSON, mutate only the keys you own, write the whole JSON back — never drop a
-//  key you don't understand.
+//  with WHO writes it, and netlify/lib/contract.ts mirrors it in zod — this file
+//  wins when they disagree. The page loads the whole JSON, mutates only the keys
+//  it owns and writes the whole JSON back — never dropping a key it doesn't
+//  understand. The skills never see the whole JSON: they send and receive items
+//  through the tools, and the server enforces the ownership below (a draft only
+//  accepts step 1's keys; the page's PUT may change only decisions, newTasks and
+//  its own status moves; outcome / processedAt come only from step 3's tools).
 //
 //  ─── Tasks live in Google Tasks / Microsoft To Do — there is NO Notion ──────
 //  One backend per mailbox, no cross-posting and no list picking:
@@ -23,7 +34,7 @@
 //
 //  ─── Groups / tabs (exactly two — there is NO session-level status) ─────────
 //  The file holds two independent review queues ("groups"). Each has its own
-//  status; nothing else in the file carries a status. `groups` has exactly the
+//  status; nothing else in the session carries a status. `groups` has exactly the
 //  keys "gabriel" and "gabriel-arina" — never a third one.
 //
 //     group key       | tab label       | which emails          | which tasks
@@ -341,10 +352,18 @@
 //  Step-by-step responsibilities
 // =============================================================================
 //
-//  STEP 1 — pa-email-triage (creates the file; overwrite any previous session)
-//    • generatedAt; groups = { gabriel: {…}, "gabriel-arina": {…} }, both pending — exactly
-//      those two keys, each { status: "pending-review", reviewedAt: null, processedAt: null }.
-//      NO top-level status key.
+//  STEP 1 — pa-email-triage (creates the session through the connector tools)
+//    • session_status first: the overwrite gate. Continue only if no session
+//      exists or every group is processed / processed-with-errors / skipped;
+//      a pending-review or reviewed group means ask Gabriel — session_begin
+//      refuses it (WRONG_STATUS) unless called with discard: true.
+//    • session_begin { generatedAt, mailboxes, gmailLabels }: the server writes
+//      groups = { gabriel: {…}, "gabriel-arina": {…} }, both pending — exactly those
+//      two keys, each { status: "pending-review", reviewedAt: null, processedAt: null } —
+//      and newTasks: []. NO top-level status key. Then session_add_emails /
+//      session_add_tasks in batches of ≤ 25 (VALIDATION names the item and
+//      field; duplicates refused), and session_publish (checks the invariants
+//      below across the whole draft, then makes it live).
 //    • gmailLabels: every user-created label of the Gabriel & Arina Gmail.
 //    • mailboxes: which connectors were fetched.
 //    • emails[]: EVERY message of every thread that has at least one inbox
@@ -364,24 +383,29 @@
 //      [triage] footer). New tasks get an empty `-- notes` section and a title
 //      that already carries the properties/* prefix.
 //
-//  STEP 2 — triage-review.html (mutates in place, per tab)
+//  STEP 2 — triage-review.html (GET /api/session, mutates in place, PUT per tab)
 //    • Fills every emails[].decision (incl. decision.labels for gmail and the
 //      DERIVED decisions of every child) and existingTasks[].decision, appends
 //      newTasks. Only heads are interactive; only the `-- notes` half of a
 //      description is editable; a task title is never written.
 //    • Confirm & Save on a tab: groups.<tab> = { status: "reviewed", reviewedAt: now,
-//      processedAt: null } for THAT TAB ONLY, then writes the whole file.
-//      Skip on a tab: same with status "skipped". Reopen (skipped → pending) sets
-//      reviewedAt back to null. The other tab is never touched.
-//    • Refuses to write if groups.<tab>.status on disk is not what it last saw.
+//      processedAt: null } for THAT TAB ONLY, then PUTs the whole session with
+//      If-Match. Skip on a tab: same with status "skipped". Reopen (skipped →
+//      pending) sets reviewedAt back to null. The other tab is never touched.
+//    • Refuses to write if the stored groups.<tab>.status is not what it last
+//      saw; the server refuses (412) if the stored session changed at all since
+//      the page re-read it, and (422) any change to a key the page does not own.
 //    • Never writes processedAt or any outcome field.
-//    • Assumes a file written by the current step 1 — there is no migration and
-//      no backwards compatibility.
+//    • Assumes a session published by the current step 1 — there is no
+//      migration and no backwards compatibility.
 //
-//  STEP 3 — pa-email-triage-save (mutates in place, per group)
-//    • GATE: if groups.gabriel.status or groups["gabriel-arina"].status is "pending-review",
-//      stop and change nothing — Gabriel must Confirm or Skip every tab first.
-//    • For EACH group whose groups.<g>.status === "reviewed":
+//  STEP 3 — pa-email-triage-save (through the connector tools, per group)
+//    • GATE: session_status — if groups.gabriel.status or groups["gabriel-arina"].status
+//      is "pending-review", stop and change nothing — Gabriel must Confirm or Skip
+//      every tab first.
+//    • For EACH group whose groups.<g>.status === "reviewed" (session_get_work pages
+//      through kinds emails / tasks / newTasks; for "processed-with-errors" it
+//      returns only items whose outcome starts with "failed", for a retry):
 //        – emails of that group: perform decision.emailAction (table above).
 //          For "create-task" create decision.task ?? suggestedTask in that
 //          mailbox's task app (Google Tasks for gmail, To Do for outlook).
@@ -398,11 +422,13 @@
 //        – newTasks of that group: create in the backend named by `provider`.
 //        – re-read the live task before writing so a `-- notes` section Gabriel
 //          typed since the fetch survives, and always keep the [triage] footer.
-//        – stamp `outcome` on every item touched (string; "FAILED: …" on errors).
-//        – set groups.<g>.status = "processed" (or "processed-with-errors" if any
-//          item failed) and groups.<g>.processedAt = now.
+//        – stamp `outcome` on every item touched (string; "FAILED: …" on errors)
+//          with session_record_outcomes — after each batch, so an interrupted
+//          run keeps its progress.
+//        – session_finish_group { group, status: "processed" | "processed-with-errors" }
+//          (the server stamps groups.<g>.processedAt).
 //    • Never touch a "skipped" group (leave its status "skipped") or one that is
-//      already "processed" / "processed-with-errors".
-//    • Do NOT add a top-level status (or any other session-level status) — the
-//      two group statuses are the only ones. Write the whole file back.
+//      already "processed" — the tools refuse it (WRONG_STATUS).
+//    • There is no top-level status (or any other session-level status) — the
+//      two group statuses are the only ones.
 // =============================================================================

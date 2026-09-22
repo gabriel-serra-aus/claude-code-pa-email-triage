@@ -1,0 +1,20 @@
+{
+  "name": "pa-email-triage",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@netlify/blobs": "^11.1.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@netlify/functions": "^6.0.0",
+    "@types/node": "^26.6.2",
+    "netlify-cli": "^27.8.0",
+    "typescript": "^5.9.3"
+  }
+}

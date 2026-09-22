@@ -1,6 +1,10 @@
 # Dependencies
 node_modules/
 
+# Netlify CLI local state (site link, dev blobs) + the lock file `netlify dev` drops
+.netlify
+deno.lock
+
 # Next.js build output
 .next/
 out/
@@ -9,6 +13,13 @@ out/
 .DS_Store
 *.tgz
 *.log
+
+# Secrets — this repo is public
+*.env
+.env*
+
+# Playwright MCP snapshots (contain account details)
+.playwright-mcp/
 
 # Per-machine Claude Code permissions
 .claude/settings.local.json

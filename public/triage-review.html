@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- No token is readable by page JS and connect-src is 'self', so a missed escape cannot exfiltrate mail. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src data:; base-uri 'none'; form-action 'self'">
 <title>Email Triage Review</title>
 <style>
   /* ── Base ─────────────────────────────────────────────────────────── */
@@ -103,6 +105,7 @@
     padding: 7px 14px;
     color: var(--text);
   }
+  a.btn { display: inline-block; text-decoration: none; }   /* the sign-in links */
   .btn:hover { background: var(--hover); }
   .btn:disabled { opacity: .45; cursor: not-allowed; }
   .btn-primary {
@@ -693,38 +696,29 @@
 
 <header>
   <div>
-    <h1>Email Triage Review <span class="version" id="app-version">v2026.09.21 - 22-02</span></h1>
+    <h1>Email Triage Review <span class="version" id="app-version">v2026.09.22 - 10-11</span></h1>
     <div class="meta" id="header-meta">No session loaded</div>
   </div>
   <div class="header-actions">
     <button class="btn theme-toggle" id="btn-theme" title="Toggle light / dark mode">🌙 Dark</button>
-    <button class="btn" id="btn-open-other">Open file…</button>
+    <!-- Shown when the sign-in expired mid-review: a NEW tab, so in-memory edits survive here. -->
+    <a class="btn btn-primary hidden" id="link-signin" href="/api/auth/login" target="_blank" rel="noopener">Sign in</a>
+    <button class="btn hidden" id="btn-reload">Reload</button>
+    <button class="btn hidden" id="btn-signout">Sign out</button>
   </div>
 </header>
 
 <main>
-  <!-- ── Landing: no file open yet ─────────────────────────────────── -->
+  <!-- ── Landing: not signed in, or no session yet ─────────────────── -->
   <div id="screen-landing" class="screen-card hidden">
-    <h2>Open a triage session</h2>
+    <h2>Email triage review</h2>
     <p>
-      This page reads <code>triage-session.json</code> (created by the
-      <b>pa-email-triage</b> skill), lets you review every email and task,
-      and saves your decisions back to the same file. Apply them afterwards
-      with <b>pa-email-triage-save</b>.
+      This page shows the triage session created by the <b>pa-email-triage</b>
+      skill, lets you review every email and task, and saves your decisions
+      back to it. Apply them afterwards with <b>pa-email-triage-save</b>.
     </p>
-    <button class="btn btn-primary" id="btn-open">Open triage-session.json…</button>
-    <button class="btn hidden" id="btn-reopen">Reopen last file</button>
+    <a class="btn btn-primary" id="btn-open" href="/api/auth/login">Sign in with Google</a>
     <div class="screen-note" id="landing-note"></div>
-  </div>
-
-  <!-- ── Unsupported browser ───────────────────────────────────────── -->
-  <div id="screen-unsupported" class="screen-card hidden">
-    <h2>Browser not supported</h2>
-    <p>
-      This app needs the File System Access API to read and write the session
-      file directly. Please open this page in <b>Microsoft Edge</b> or
-      <b>Google Chrome</b>.
-    </p>
   </div>
 
   <!-- ── Review UI ─────────────────────────────────────────────────── -->
@@ -832,10 +826,11 @@
 "use strict";
 
 /* ══════════════════════════════════════════════════════════════════════
-   Email Triage Review — static, serverless review app.
+   Email Triage Review — static review page, hosted on Netlify.
 
-   Reads and writes ONE file (triage-session.json) via the File System
-   Access API. Talks to no servers: pa-email-triage writes the file,
+   Reads and writes ONE session through /api/session (GET, then PUT with
+   If-Match), signed in with Google via /api/auth/*. It talks to nothing else
+   — no Gmail/Outlook/task-app calls: pa-email-triage publishes the session,
    this page edits the `decision` blocks + newTasks and flips the status of
    the confirmed GROUP (session.groups.gabriel / ["gabriel-arina"]) to "reviewed" or
    "skipped"; pa-email-triage-save runs only once NEITHER group is
@@ -994,8 +989,9 @@ function toggleTheme() {
 }
 
 // ── App state ─────────────────────────────────────────────────────────
-let fileHandle = null;   // FileSystemFileHandle for triage-session.json
-let session = null;      // the ENTIRE parsed JSON — mutated in place so
+let sessionETag = null;  // ETag of the stored session as this page last read / wrote it
+let signedIn = false;    // the last call to /api/session was not a 401
+let session = null;     // the ENTIRE parsed JSON — mutated in place so
                          // every field the app doesn't touch is preserved
 // `expanded` = threadIds whose earlier messages are unfolded. In memory only —
 // never written to the file, and reset whenever a session is loaded.
@@ -1093,80 +1089,91 @@ function emailDeepLink(email) {
   return "";
 }
 
-// ── IndexedDB: remember the file handle between visits ────────────────
-function idbOpen() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open("triage-review", 1);
-    req.onupgradeneeded = () => req.result.createObjectStore("handles");
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+// ── Session store: /api/session (the sign-in cookie is HttpOnly — no token in JS) ──
+class AuthRequired extends Error {}   // 401 — not signed in, or the sign-in expired
+class NoSession extends Error {}      // 404 — pa-email-triage has not published one yet
+class Conflict extends Error {}       // 412 — the stored session changed since it was read
+
+/** The stored session as text + the ETag a later write must match. */
+async function readSession() {
+  const res = await fetch("/api/session", { cache: "no-store" });
+  if (res.status === 401) throw new AuthRequired("Sign in required");
+  signedIn = true;
+  $("link-signin").classList.add("hidden");
+  if (res.status === 404) throw new NoSession("No session yet");
+  if (!res.ok) throw new Error(`Could not load the session (${res.status})`);
+  return { text: await res.text(), etag: res.headers.get("ETag") };
+}
+
+/** Writes the whole session over the copy `etag` came from; returns the new ETag. */
+async function writeSession(text, etag) {
+  const res = await fetch("/api/session", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", "If-Match": etag },
+    body: text,
   });
-}
-async function storeHandle(handle) {
-  try {
-    const db = await idbOpen();
-    await new Promise((resolve, reject) => {
-      const tx = db.transaction("handles", "readwrite");
-      tx.objectStore("handles").put(handle, "session");
-      tx.oncomplete = resolve;
-      tx.onerror = () => reject(tx.error);
-    });
-  } catch { /* remembering the file is a convenience — never fatal */ }
-}
-async function loadStoredHandle() {
-  try {
-    const db = await idbOpen();
-    return await new Promise((resolve, reject) => {
-      const req = db.transaction("handles").objectStore("handles").get("session");
-      req.onsuccess = () => resolve(req.result || null);
-      req.onerror = () => reject(req.error);
-    });
-  } catch { return null; }
-}
-
-// ── File open / read ──────────────────────────────────────────────────
-async function openViaPicker() {
-  try {
-    const [handle] = await window.showOpenFilePicker({
-      types: [{ description: "Triage session JSON", accept: { "application/json": [".json"] } }],
-    });
-    await loadFromHandle(handle);
-  } catch (err) {
-    if (err && err.name === "AbortError") return; // user cancelled the picker
-    showToast("Could not open file — " + err.message);
+  if (res.status === 401) throw new AuthRequired("Sign in required");
+  if (res.status === 412) throw new Conflict("Session changed");
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);   // a 5xx may not carry JSON
+    const details = body && Array.isArray(body.details) && body.details.length ? ` (${body.details[0]})` : "";
+    throw new Error(((body && body.error) || `server answered ${res.status}`) + details);
   }
+  return res.headers.get("ETag");
 }
 
-async function reopenStored() {
-  const handle = await loadStoredHandle();
-  if (!handle) { showToast("No remembered file — use Open"); return; }
+/** Signed out → landing. The header "Sign in" link (new tab) is for a sign-in
+ *  that expired mid-review, so it only shows while a session is on screen. */
+function setSignedOut() {
+  signedIn = false;
+  $("link-signin").classList.toggle("hidden", !session);
+}
+
+/** Sign-in links carry ?type= through the Google round trip; ?auth=denied is
+ *  what the callback sends back for an account that is not allowed. */
+let authDenied = false;
+function initSignIn() {
+  const login = "/api/auth/login" + (URL_TYPE === "gna" || URL_TYPE === "gabriel" ? `?type=${URL_TYPE}` : "");
+  $("btn-open").href = login;
+  $("link-signin").href = login;
+  const params = new URLSearchParams(location.search);
+  if (params.get("auth") !== "denied") return;
+  authDenied = true;
+  params.delete("auth");
+  const query = params.toString();
+  history.replaceState(null, "", location.pathname + (query ? `?${query}` : ""));
+}
+
+async function signOut() {
+  const res = await fetch("/api/auth/logout", { method: "POST" });
+  if (!res.ok) { showToast(`Sign out failed (${res.status})`); return; }
+  session = null;
+  sessionETag = null;
+  $("landing-note").textContent = "";
+  setSignedOut();
+  render();
+}
+
+async function loadSession() {
+  let loaded;
   try {
-    // requestPermission needs a user gesture; this runs from a button click.
-    const perm = await handle.requestPermission({ mode: "readwrite" });
-    if (perm !== "granted") { showToast("Permission not granted"); return; }
-    await loadFromHandle(handle);
+    loaded = await readSession();
   } catch (err) {
-    showToast("Could not reopen — " + err.message);
-  }
-}
-
-async function loadFromHandle(handle) {
-  const file = await handle.getFile();
-  let parsed;
-  try {
-    parsed = JSON.parse(await file.text());
-  } catch {
-    showToast("That file is not valid JSON");
+    session = null;
+    sessionETag = null;
+    if (err instanceof AuthRequired) {
+      setSignedOut();
+      $("landing-note").textContent = authDenied ? "This Google account is not allowed." : "";
+    } else if (err instanceof NoSession) $("landing-note").textContent = "No session yet — run pa-email-triage.";
+    else showToast(err.message);
+    render();
     return;
   }
-  if (!parsed || !Array.isArray(parsed.emails)) {
-    showToast("That file doesn't look like a triage session (no emails array)");
-    return;
-  }
-  fileHandle = handle;
-  session = parsed;
+  session = JSON.parse(loaded.text);
+  sessionETag = loaded.etag;
+  $("landing-note").textContent = "";
+  $("link-signin").classList.add("hidden");
   applyLoadDefaults();
-  storeHandle(handle);
   ui.filter = "All";
   ui.tab = TABS[0].id;
   ui.expanded = new Set();
@@ -1410,31 +1417,23 @@ function effectiveTask(e) {
 
 // ── Rendering: pick a screen ──────────────────────────────────────────
 function render() {
-  const screens = ["screen-landing", "screen-unsupported", "screen-review"];
+  const screens = ["screen-landing", "screen-review"];
   screens.forEach((id) => $(id).classList.add("hidden"));
   $("confirm-bar").classList.add("hidden");
-
-  if (!window.showOpenFilePicker) {
-    $("screen-unsupported").classList.remove("hidden");
-    $("header-meta").textContent = "Unsupported browser";
-    return;
-  }
+  // Signed in: Reload + Sign out. Signed out: the landing card's sign-in button.
+  $("btn-reload").classList.toggle("hidden", !signedIn);
+  $("btn-signout").classList.toggle("hidden", !signedIn);
+  $("btn-open").classList.toggle("hidden", signedIn);
 
   if (!session) {
     $("screen-landing").classList.remove("hidden");
     $("header-meta").textContent = "No session loaded";
-    loadStoredHandle().then((h) => {
-      if (h) {
-        $("btn-reopen").classList.remove("hidden");
-        $("btn-reopen").textContent = `Reopen ${h.name}`;
-      }
-    });
     return;
   }
 
   const statusText = TABS.map((t) => `${t.label}: ${groupStatus(t.id)}`).join(" · ");
   $("header-meta").textContent =
-    `${fileHandle ? fileHandle.name + " — " : ""}generated ${formatDate(session.generatedAt)}` +
+    `Generated ${formatDate(session.generatedAt)}` +
     ` (${ageLabel(session.generatedAt)}) — ${statusText}`;
 
   $("screen-review").classList.remove("hidden");
@@ -2003,10 +2002,11 @@ async function writeGroupStatus(tab, status, expectedOnDisk, toast) {
     // Stale-tab guard: only save over a file whose copy of THIS group is
     // still in the state we last saw, so a forgotten old tab can't clobber a
     // reviewed/skipped/processed group.
-    const onDisk = JSON.parse(await (await fileHandle.getFile()).text());
+    const { text, etag } = await readSession();
+    const onDisk = JSON.parse(text);
     ensureGroups(onDisk);
     if (groupStatus(tab, onDisk) !== expectedOnDisk) {
-      showToast(`Not saved — ${label} is already "${groupStatus(tab, onDisk)}" on disk. Reload to see it.`);
+      showToast(`Not saved — ${label} is already "${groupStatus(tab, onDisk)}". Reload to see it.`);
       return false;
     }
     // The OTHER group is the disk's business if it moved on since we loaded.
@@ -2021,14 +2021,18 @@ async function writeGroupStatus(tab, status, expectedOnDisk, toast) {
     const reviewedAt = status === "pending-review" ? null : new Date().toISOString();
     session.groups[tab] = { ...session.groups[tab], status, reviewedAt, processedAt: null };
     // Never set processedAt or outcome fields — those belong to pa-email-triage-save.
-    const writable = await fileHandle.createWritable();
-    await writable.write(JSON.stringify(session, null, 2));
-    await writable.close();
+    // The ETag is the real lost-update guard: the server refuses the write (412)
+    // if the stored session changed in ANY way since the re-read above.
+    sessionETag = await writeSession(JSON.stringify(session, null, 2), etag);
     showToast(toast);
     return true;
   } catch (err) {
     session.groups = before; // roll back so the UI stays editable
-    showToast("Save failed — " + err.message);
+    if (err instanceof Conflict) showToast("Not saved — session changed. Reload.");
+    else if (err instanceof AuthRequired) {
+      setSignedOut();   // reveals the header "Sign in" link (new tab) — edits stay in memory here
+      showToast("Signed out — sign in and press again");
+    } else showToast("Save failed — " + err.message);
     return false;
   }
 }
@@ -2222,10 +2226,9 @@ function applyModal() {
 }
 
 // ── Wire up static buttons & boot ─────────────────────────────────────
-$("btn-open").addEventListener("click", openViaPicker);
-$("btn-open-other").addEventListener("click", openViaPicker);
+$("btn-reload").addEventListener("click", loadSession);
+$("btn-signout").addEventListener("click", signOut);
 $("btn-theme").addEventListener("click", toggleTheme);
-$("btn-reopen").addEventListener("click", reopenStored);
 $("btn-add-task").addEventListener("click", () => {
   // A task typed here belongs to the backend of the tab it was added from.
   const provider = tabProvider(ui.tab);
@@ -2263,21 +2266,12 @@ document.addEventListener("keydown", (ev) => {
   renderReview();
 }, true));
 
-// Boot: if the stored handle is already granted, load it silently;
-// otherwise the landing screen offers a one-click "Reopen".
+// Boot: signed in → straight into the session; otherwise the landing card.
 (async function boot() {
   initTheme();
+  initSignIn();
   render();
-  if (!window.showOpenFilePicker) return;
-  const stored = await loadStoredHandle();
-  if (stored) {
-    try {
-      const perm = await stored.queryPermission({ mode: "readwrite" });
-      if (perm === "granted") { await loadFromHandle(stored); return; }
-    } catch { /* fall through to the landing screen */ }
-    $("btn-reopen").classList.remove("hidden");
-    $("btn-reopen").textContent = `Reopen ${stored.name}`;
-  }
+  await loadSession();
 })();
 </script>
 </body>

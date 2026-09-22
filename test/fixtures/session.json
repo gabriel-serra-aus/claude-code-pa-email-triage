@@ -1,0 +1,254 @@
+{
+  "generatedAt": "2026-08-31T08:00:00.000Z",
+  "mailboxes": ["outlook", "gmail"],
+  "gmailLabels": ["Travel", "properties/mount st", "properties/St Huberts"],
+  "groups": {
+    "gabriel": { "status": "pending-review", "reviewedAt": null, "processedAt": null },
+    "gabriel-arina": { "status": "pending-review", "reviewedAt": null, "processedAt": null }
+  },
+  "emails": [
+    {
+      "id": "g-msg-002",
+      "source": "gmail",
+      "sourceId": "gmail:g-msg-002",
+      "from": "Sample Sender <sender@example.com>",
+      "subject": "Re: Example plumber quote",
+      "date": "2026-08-31T03:40:00.000Z",
+      "summary": "SYNTHETIC. Second quote arrived and needs approval by Friday.",
+      "isFlagged": true,
+      "labels": ["properties/mount st"],
+      "systemLabels": ["IMPORTANT"],
+      "threadId": "g-thr-001",
+      "threadRole": "head",
+      "inInbox": true,
+      "newInThread": true,
+      "category": "Important",
+      "existingTaskKey": "gtasks:LIST1:task-a",
+      "suggestedTask": null,
+      "decision": {
+        "emailAction": "update-task",
+        "isTask": false,
+        "flagged": true,
+        "labels": ["properties/mount st", "Travel"],
+        "task": null
+      }
+    },
+    {
+      "id": "g-msg-001",
+      "source": "gmail",
+      "sourceId": "gmail:g-msg-001",
+      "from": "Example Plumbing <quotes@example.com>",
+      "subject": "Example plumber quote",
+      "date": "2026-08-26T21:05:00.000Z",
+      "summary": "SYNTHETIC. First quote, not itemised.",
+      "isFlagged": false,
+      "labels": ["properties/mount st"],
+      "systemLabels": [],
+      "threadId": "g-thr-001",
+      "threadRole": "child",
+      "inInbox": false,
+      "decision": {
+        "emailAction": "archive",
+        "isTask": false,
+        "flagged": false,
+        "labels": ["properties/mount st"],
+        "task": null
+      }
+    },
+    {
+      "id": "g-msg-003",
+      "source": "gmail",
+      "sourceId": "gmail:g-msg-003",
+      "from": "Example Airline <news@example.com>",
+      "subject": "Your itinerary has been updated",
+      "date": "2026-08-30T10:00:00.000Z",
+      "summary": "SYNTHETIC. Flight time moved by 20 minutes.",
+      "isFlagged": false,
+      "labels": ["Travel"],
+      "systemLabels": ["CATEGORY_UPDATES"],
+      "threadId": "g-thr-002",
+      "threadRole": "head",
+      "inInbox": true,
+      "newInThread": false,
+      "category": "FYI",
+      "existingTaskKey": null,
+      "suggestedTask": null,
+      "decision": {
+        "emailAction": "flag",
+        "isTask": false,
+        "flagged": false,
+        "labels": ["Travel"],
+        "task": null
+      }
+    },
+    {
+      "id": "o-msg-001",
+      "source": "outlook",
+      "sourceId": "outlook:o-msg-001",
+      "from": "Example Council <rates@example.com>",
+      "subject": "Rates notice due 15 Sep",
+      "date": "2026-08-28T22:14:00.000Z",
+      "summary": "SYNTHETIC. Council rates due 15 Sep.",
+      "isFlagged": false,
+      "threadId": "o-thr-001",
+      "threadRole": "head",
+      "inInbox": true,
+      "newInThread": false,
+      "category": "Important",
+      "existingTaskKey": null,
+      "suggestedTask": {
+        "title": "Huberts: Pay council rates",
+        "notes": "-- notes\n\n-- auto --\nPay the rates before 15 Sep.\n28 Aug — rates notice issued\nLatest email: https://outlook.example.com/mail/o-msg-001\n[triage] thread=o-thr-001 src=outlook",
+        "dueDate": "2026-09-15",
+        "link": "https://outlook.example.com/mail/o-msg-001"
+      },
+      "decision": {
+        "emailAction": "create-task",
+        "isTask": true,
+        "flagged": true,
+        "task": null
+      }
+    },
+    {
+      "id": "o-msg-002",
+      "source": "outlook",
+      "sourceId": "outlook:o-msg-002",
+      "from": "Example Shop <deals@example.com>",
+      "subject": "Weekend sale",
+      "date": "2026-08-29T01:00:00.000Z",
+      "summary": "SYNTHETIC. Marketing email.",
+      "isFlagged": false,
+      "threadId": "o-thr-002",
+      "threadRole": "head",
+      "inInbox": true,
+      "newInThread": false,
+      "category": "Not Important",
+      "existingTaskKey": null,
+      "suggestedTask": null,
+      "decision": {
+        "emailAction": "archive",
+        "isTask": false,
+        "flagged": false,
+        "task": null
+      }
+    },
+    {
+      "id": "o-msg-004",
+      "source": "outlook",
+      "sourceId": "outlook:o-msg-004",
+      "from": "Example Insurer <claims@example.com>",
+      "subject": "RE: Claim 000-EXAMPLE closed",
+      "date": "2026-08-30T05:30:00.000Z",
+      "summary": "SYNTHETIC. Claim closed, nothing further needed.",
+      "isFlagged": false,
+      "threadId": "o-thr-003",
+      "threadRole": "head",
+      "inInbox": true,
+      "newInThread": true,
+      "category": "FYI",
+      "existingTaskKey": "todo:LISTA:task-b",
+      "suggestedTask": null,
+      "decision": {
+        "emailAction": "complete-task",
+        "isTask": false,
+        "flagged": false,
+        "task": null
+      }
+    },
+    {
+      "id": "o-msg-003",
+      "source": "outlook",
+      "sourceId": "outlook:o-msg-003",
+      "from": "Example Insurer <claims@example.com>",
+      "subject": "Claim 000-EXAMPLE received",
+      "date": "2026-08-25T05:30:00.000Z",
+      "summary": "SYNTHETIC. Claim lodged.",
+      "isFlagged": false,
+      "threadId": "o-thr-003",
+      "threadRole": "child",
+      "inInbox": true,
+      "decision": {
+        "emailAction": "archive",
+        "isTask": false,
+        "flagged": false,
+        "task": null
+      }
+    }
+  ],
+  "existingTasks": [
+    {
+      "key": "gtasks:LIST1:task-a",
+      "provider": "gtasks",
+      "listId": "LIST1",
+      "listName": "My Tasks",
+      "url": null,
+      "title": "Mount: plumber quote",
+      "notes": "-- notes\nAsk about the water damage too.\n\n-- auto --\n27 Aug — quote requested\nLatest email: https://mail.example.com/g-msg-001\n[triage] thread=g-thr-001 src=gmail",
+      "status": "needsAction",
+      "dueDate": "2026-09-05",
+      "link": "https://mail.example.com/g-msg-001",
+      "threadId": "g-thr-001",
+      "decision": {
+        "complete": false,
+        "cancel": false,
+        "edits": { "link": "https://mail.example.com/g-msg-002", "dueDate": "2026-09-04" }
+      }
+    },
+    {
+      "key": "gtasks:LIST1:task-d",
+      "provider": "gtasks",
+      "listId": "LIST1",
+      "listName": "My Tasks",
+      "url": null,
+      "title": "Book example flights",
+      "notes": "-- notes\n\n-- auto --",
+      "status": "completed",
+      "dueDate": "",
+      "link": "",
+      "threadId": null,
+      "decision": { "complete": false, "cancel": false, "edits": null }
+    },
+    {
+      "key": "todo:LISTA:task-b",
+      "provider": "todo",
+      "listId": "LISTA",
+      "listName": "Tasks",
+      "url": "https://to-do.example.com/task-b",
+      "title": "Follow up insurance claim",
+      "notes": "-- notes\n\n-- auto --\n25 Aug — claim lodged\nLatest email: https://outlook.example.com/mail/o-msg-003\n[triage] thread=o-thr-003 src=outlook",
+      "status": "needsAction",
+      "dueDate": "",
+      "link": "https://outlook.example.com/mail/o-msg-003",
+      "threadId": "o-thr-003",
+      "decision": { "complete": true, "cancel": false, "edits": null }
+    },
+    {
+      "key": "todo:LISTA:task-c",
+      "provider": "todo",
+      "listId": "LISTA",
+      "listName": "Tasks",
+      "url": null,
+      "title": "Untouched example task",
+      "notes": "-- notes\n\n-- auto --",
+      "status": "needsAction",
+      "dueDate": "",
+      "link": "",
+      "threadId": null,
+      "decision": { "complete": false, "cancel": false, "edits": null }
+    }
+  ],
+  "newTasks": [
+    {
+      "title": "Renew passport",
+      "notes": "-- notes\nBook an appointment.\n\n-- auto --",
+      "provider": "todo",
+      "dueDate": ""
+    },
+    {
+      "title": "Buy example gift",
+      "notes": "-- notes\n\n-- auto --",
+      "provider": "gtasks",
+      "dueDate": "2026-09-20"
+    }
+  ]
+}
