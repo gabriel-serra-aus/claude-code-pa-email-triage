@@ -696,7 +696,7 @@
 
 <header>
   <div>
-    <h1>Email Triage Review <span class="version" id="app-version">v2026.09.22 - 10-11</span></h1>
+    <h1>Email Triage Review <span class="version" id="app-version">v2026.09.22 - 22-47</span></h1>
     <div class="meta" id="header-meta">No session loaded</div>
   </div>
   <div class="header-actions">
@@ -829,7 +829,7 @@
    Email Triage Review — static review page, hosted on Netlify.
 
    Reads and writes ONE session through /api/session (GET, then PUT with
-   If-Match), signed in with Google via /api/auth/*. It talks to nothing else
+   X-Session-ETag), signed in with Google via /api/auth/*. It talks to nothing else
    — no Gmail/Outlook/task-app calls: pa-email-triage publishes the session,
    this page edits the `decision` blocks + newTasks and flips the status of
    the confirmed GROUP (session.groups.gabriel / ["gabriel-arina"]) to "reviewed" or
@@ -1109,7 +1109,8 @@ async function readSession() {
 async function writeSession(text, etag) {
   const res = await fetch("/api/session", {
     method: "PUT",
-    headers: { "Content-Type": "application/json", "If-Match": etag },
+    // Netlify's edge strips If-Match on the way to the function; X-Session-ETag is what the server checks.
+    headers: { "Content-Type": "application/json", "If-Match": etag, "X-Session-ETag": etag },
     body: text,
   });
   if (res.status === 401) throw new AuthRequired("Sign in required");

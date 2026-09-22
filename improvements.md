@@ -2,6 +2,13 @@
 
 ## Change log
 
+### 22 Sep 2026 — Confirm & Save failed on Netlify: "If-Match required"
+
+- Netlify's edge strips the `If-Match` request header before a function sees it (verified from
+  the live site: a PUT sent with `If-Match` answered `428`), so every Confirm / Skip / Reopen
+  failed. The page now sends the etag as `X-Session-ETag` (and still `If-Match`); the server
+  checks `X-Session-ETag` first and falls back to `If-Match`. Nothing else changed.
+
 ### 22 Sep 2026 — Netlify: cloud session, Google sign-in, MCP connector
 
 - **No more local file.** The session lives in Netlify Blobs (store `triage`, key `session`).
@@ -40,6 +47,13 @@
   System Access API; lifted on 22 Sep.)
 
 ## Backlog
+
+- **MCP secret in a request header, not the URL.** claude.ai custom connectors now accept
+  request headers (seen 22 Sep 2026 in "Add custom connector"), which the technical spec assumed
+  they didn't. Change `netlify/functions/mcp.ts` to expect `Authorization: Bearer <MCP_SECRET>`
+  on a plain `/mcp` path (`timingSafeEqual` as now; missing/wrong → 404), one test, docs;
+  rotate `MCP_SECRET` (the current one has been in a URL and a screenshot); re-add the connector
+  with the header. Keeps the secret out of Netlify request logs and the connector URL.
 
 - If pa-email-triage pre-writes `decision.emailAction: "archive"` on FYI heads, the page keeps it
   (still an allowed value) and the new Keep-in-inbox default never shows — check a real session file.

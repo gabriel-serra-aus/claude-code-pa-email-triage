@@ -19,8 +19,11 @@ async function get(): Promise<Response> {
 async function put(req: Request): Promise<Response> {
   if (!sameOrigin(req)) return json(403, { error: "Bad Origin" });
 
-  const ifMatch = req.headers.get("if-match");
-  if (!ifMatch) return json(428, { error: "If-Match required" });
+  // Netlify's edge strips `If-Match` from requests before they reach a function
+  // (seen 22 Sep 2026: the page's PUT arrived without it), so the page carries the
+  // etag in `X-Session-ETag`; `If-Match` still works where nothing strips it.
+  const ifMatch = req.headers.get("x-session-etag") ?? req.headers.get("if-match");
+  if (!ifMatch) return json(428, { error: "X-Session-ETag (or If-Match) required" });
   const stored = await readDoc("session");
   if (!stored) return json(404, { error: "No session yet" });
   if (normaliseEtag(ifMatch) !== normaliseEtag(stored.etag)) return json(412, { error: "Session changed" });
