@@ -8,6 +8,10 @@
   the live site: a PUT sent with `If-Match` answered `428`), so every Confirm / Skip / Reopen
   failed. The page now sends the etag as `X-Session-ETag` (and still `If-Match`); the server
   checks `X-Session-ETag` first and falls back to `If-Match`. Nothing else changed.
+- Second round, same evening: the write then answered `412` because Netlify's CDN rewrites the
+  `ETag` it serves when it compresses the response (`"abc"` → `"abc-df"`), so the page echoed a
+  mangled etag. `GET` / `PUT` now also return the raw Blobs etag as `X-Session-ETag`, the page
+  prefers that header, and the server's normaliser strips a `-df`-style suffix as well.
 
 ### 22 Sep 2026 — Netlify: cloud session, Google sign-in, MCP connector
 

@@ -696,7 +696,7 @@
 
 <header>
   <div>
-    <h1>Email Triage Review <span class="version" id="app-version">v2026.09.22 - 22-47</span></h1>
+    <h1>Email Triage Review <span class="version" id="app-version">v2026.09.22 - 22-59</span></h1>
     <div class="meta" id="header-meta">No session loaded</div>
   </div>
   <div class="header-actions">
@@ -1094,6 +1094,10 @@ class AuthRequired extends Error {}   // 401 — not signed in, or the sign-in e
 class NoSession extends Error {}      // 404 — pa-email-triage has not published one yet
 class Conflict extends Error {}       // 412 — the stored session changed since it was read
 
+/** Netlify's CDN rewrites `ETag` when it compresses the response ("abc" -> "abc-df"),
+ *  so the server also sends the raw etag as X-Session-ETag; prefer that. */
+function etagOf(res) { return res.headers.get("X-Session-ETag") || res.headers.get("ETag"); }
+
 /** The stored session as text + the ETag a later write must match. */
 async function readSession() {
   const res = await fetch("/api/session", { cache: "no-store" });
@@ -1102,7 +1106,7 @@ async function readSession() {
   $("link-signin").classList.add("hidden");
   if (res.status === 404) throw new NoSession("No session yet");
   if (!res.ok) throw new Error(`Could not load the session (${res.status})`);
-  return { text: await res.text(), etag: res.headers.get("ETag") };
+  return { text: await res.text(), etag: etagOf(res) };
 }
 
 /** Writes the whole session over the copy `etag` came from; returns the new ETag. */
@@ -1120,7 +1124,7 @@ async function writeSession(text, etag) {
     const details = body && Array.isArray(body.details) && body.details.length ? ` (${body.details[0]})` : "";
     throw new Error(((body && body.error) || `server answered ${res.status}`) + details);
   }
-  return res.headers.get("ETag");
+  return etagOf(res);
 }
 
 /** Signed out → landing. The header "Sign in" link (new tab) is for a sign-in
