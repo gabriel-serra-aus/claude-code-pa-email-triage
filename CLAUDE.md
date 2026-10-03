@@ -10,7 +10,7 @@ One Netlify site: a static page, `public/triage-review.html` (step 2 of a three-
 - **One side per page.** No parameter (or `?type=gabriel-arina`) → Gabriel & Arina; `?type=gabriel` → Gabriel. Any other value → an error on the landing card, nothing loaded — never a fallback, and never both sides on one page. Same rule on `rules.html`. The side survives the sign-in round trip.
 - Dependencies are exactly `@netlify/blobs`, `@modelcontextprotocol/sdk`, `zod` (runtime) and `@netlify/functions`, `typescript`, `netlify-cli`, `@types/node` (dev). Anything else needs Gabriel's OK.
 - Checks: `npx tsc --noEmit`, `node --test` (Node's own TypeScript stripping, ≥ 22.18; tests import `.ts` directly), and `node --check` on each page's extracted `<script>`.
-- The spec of the Netlify move lives in `improvements/` (functional-spec, technical-spec, instructions).
+- `docs/functional-spec.md` is the one spec of how the whole loop works — skills, pages, connector, store — plus known gaps and backlog; `README.md` is its one-page summary; the session JSON itself is in `triage-session.schema.jsonc`.
 
 The old Next.js app (Apr–Aug 2026), the `localhost:8765` server scripts (deleted 29 Aug 2026) and the local-file version of the page (File System Access API + IndexedDB handle, Aug–Sep 2026) live in git history only.
 
@@ -53,7 +53,7 @@ One per side (`context-gabriel`, `context-gabriel-arina`) — the rules pa-email
 - **Gabriel edits it on the pages, never by hand:** `rules.html` (tabs Senders / Properties / Gmail labels / Topics / Ignore list / Rules / Run settings / History; deep link `rules.html#senders`) and the review page's sender chip → Sender rule modal (`senderChipHTML`, `openSenderEditor`, `saveContextChange`).
 - **Every change saves at once:** re-read, apply the change to the fresh copy, `PUT` the whole document; `412` → redo the same change on a new read (3 attempts). Same on both pages.
 - **Separate from the session.** A context save never touches the review on screen or the session; it applies from the next pa-email-triage run. The review page loads it after the session (`loadContext`); a failed load shows a toast and hides the chips. Locked tabs disable the chip like everything else.
-- **History:** every `PUT` keeps the version it replaced (`context-history/<iso>`, newest 50). Restore = `PUT` the old version over the current etag, so the current one goes into history too.
+- **History:** every `PUT` keeps the version it replaced (`context-history/<side>/<iso>`, newest 50 per side). Restore = `PUT` the old version over the current etag, so the current one goes into history too.
 - **Seed:** `PUT` never creates. Each side's first copy is loaded once with `netlify blobs:set triage context-<side> --input <file>` (file outside the repo, valid against `ContextSchema`; `emptyContext()` is the shape of an empty one).
 - **Never put the real context in the repo** (public — it names people, addresses and properties). Tests use a synthetic one.
 
@@ -115,4 +115,4 @@ Each page shows a build stamp in the header: `<span class="version" id="app-vers
 - Responsive: three media blocks at the end of the stylesheet — `max-width: 960px` (email rows become date / email / category + action via grid areas on `.cell-date` `.cell-main` `.cell-cat` `.cell-action`), `max-width: 600px` (everything stacks, full-screen modal, scrolling filter bar) and `(hover: none), (pointer: coarse)` (bigger targets, label × always visible). Phones and iPads run the page.
 - Quick syntax check after edits: extract the `<script>` body and run `node --check` on it. After backend edits: `npx tsc --noEmit` and `node --test`.
 - Local runtime checks: `npx netlify dev` (env comes from the linked site — never from a file in the repo). Seed the emulated store through the MCP tools with a throwaway script in the scratchpad; never print `MCP_SECRET`, never write real session data into the repo.
-- `improvements.md` is the backlog + change log; add to it when making a deliberate UX change.
+- Keep `docs/functional-spec.md` (and `README.md` if the summary changes) true in the same commit as any behaviour change; open problems go under its **Known gaps and backlog**. There is no change log — git history is it.
