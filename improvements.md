@@ -2,6 +2,27 @@
 
 ## Change log
 
+### 3 Oct 2026 — Triage Rules page, sender rule panel, context store
+
+- **The triage context moved into the app.** What `PA/Email Triage/task-context.md` held
+  (properties, senders, Gmail label registry + guide, topics, ignore list, rules, run settings)
+  is now one document in Blobs (store `triage`, key `context`), strict zod schema in
+  `netlify/lib/context.ts`. Step 1 reads it with the new read-only connector tool
+  `context_get` (markdown by default, `NO_CONTEXT` if never loaded). Seeded once with
+  `netlify blobs:set`; `PUT` never creates.
+- **`/api/context`.** `GET` + `X-Context-ETag`, `?history`, `?version=<key>`; `PUT` with
+  `X-Context-ETag` (428 / 412 / 422, Origin check), server stamps `updatedAt` / `updatedBy`.
+  Every replaced version is kept under `context-history/<iso>`, newest 50.
+- **New page `rules.html` ("Triage Rules").** Tabs Senders / Properties / Gmail labels (+ label
+  guide) / Topics / Ignore list / Rules (ordered, on/off) / Run settings / History (view,
+  restore). Every change saves at once; a lost race (412) redoes the change on a fresh copy, up
+  to 3 times. Sign-in returns to it (`?type=rules`). Header **Rules** link on the review page.
+- **Sender chip + Sender rule panel on the review page.** Each head's sender shows what the
+  rules say ("👤 relationship · P# name", amber "ignored") or "+ sender rule"; clicking opens a
+  panel (name, addresses/@domains, relationship, property, Gmail label, notes, ignore, add a
+  rule). Confirm saves to the context straight away — separate from the session, never changes
+  the review, applies from the next pa-email-triage run. Disabled on locked tabs.
+
 ### 22 Sep 2026 — Confirm & Save failed on Netlify: "If-Match required"
 
 - Netlify's edge strips the `If-Match` request header before a function sees it (verified from

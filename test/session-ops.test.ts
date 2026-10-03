@@ -154,7 +154,7 @@ describe("publish invariants", () => {
     assertOpError(() => appendEmails(beginDraft(null, BEGIN), [{ ...step1Emails()[2], category: "Urgent" }]), "VALIDATION", /\.category: /);
     assertOpError(() => appendEmails(beginDraft(null, BEGIN), [{ ...step1Emails()[2], source: "yahoo", sourceId: "yahoo:g-msg-003" }]), "VALIDATION", /\.source: /);
     assertOpError(() => appendTasks(beginDraft(null, BEGIN), [{ ...step1Tasks()[0], status: "open" }]), "VALIDATION", /\.status: /);
-    assertOpError(() => appendTasks(beginDraft(null, BEGIN), [{ ...step1Tasks()[0], provider: "notion" }]), "VALIDATION", /\.provider: /);
+    assertOpError(() => appendTasks(beginDraft(null, BEGIN), [{ ...step1Tasks()[0], provider: "other" }]), "VALIDATION", /\.provider: /);
   });
 
   it("6 — sourceId is source:id", () => {

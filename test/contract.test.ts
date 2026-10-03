@@ -78,11 +78,11 @@ describe("checkSession — whole session", () => {
       ["source", (s) => { (s.emails[2] as Record<string, unknown>).source = "yahoo"; }],
       ["category", (s) => { (s.emails[2] as Record<string, unknown>).category = "Urgent"; }],
       ["threadRole", (s) => { (s.emails[2] as Record<string, unknown>).threadRole = "tail"; }],
-      ["provider", (s) => { (s.existingTasks[3] as Record<string, unknown>).provider = "notion"; }],
+      ["provider", (s) => { (s.existingTasks[3] as Record<string, unknown>).provider = "other"; }],
       ["status", (s) => { (s.existingTasks[3] as Record<string, unknown>).status = "open"; }],
       ["emailAction", (s) => { (s.emails[2]!.decision as Record<string, unknown>).emailAction = "leave-alone"; }],
       ["groups.gabriel.status", (s) => { (s.groups.gabriel as Record<string, unknown>).status = "done"; }],
-      ["newTasks[0].provider", (s) => { (s.newTasks[0] as Record<string, unknown>).provider = "notion"; }],
+      ["newTasks[0].provider", (s) => { (s.newTasks[0] as Record<string, unknown>).provider = "other"; }],
     ];
     for (const [field, edit] of edits) {
       const problems = problemsAfter(edit);

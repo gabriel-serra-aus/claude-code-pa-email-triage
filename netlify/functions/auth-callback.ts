@@ -1,7 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import type { Config } from "@netlify/functions";
 import {
-  OAUTH_COOKIE, PAGE, clearOauthCookie, env, isAllowed, pageType, readCookie, respond, sessionCookie, signSession,
+  OAUTH_COOKIE, PAGE, clearOauthCookie, env, isAllowed, landingFor, pageType, readCookie, respond, sessionCookie, signSession,
 } from "../lib/auth.ts";
 
 function redirect(location: string, cookies: string[]): Response {
@@ -57,8 +57,7 @@ export default async (req: Request): Promise<Response> => {
     return redirect(`${PAGE}?auth=denied`, [clearOauthCookie()]);
   }
 
-  const type = pageType(cookieType ?? null);
-  return redirect(type ? `${PAGE}?type=${type}` : PAGE, [sessionCookie(signSession(email.toLowerCase(), new Date())), clearOauthCookie()]);
+  return redirect(landingFor(pageType(cookieType ?? null)), [sessionCookie(signSession(email.toLowerCase(), new Date())), clearOauthCookie()]);
 };
 
 export const config: Config = { path: "/api/auth/callback" };

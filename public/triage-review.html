@@ -318,6 +318,17 @@
   .subject { font-weight: 600; }
   .from-line { font-size: 12.5px; margin-top: 2px; margin-bottom: 14px; }
   .from-email { color: var(--muted); margin-left: 4px; }
+  /* Sender rule chip beside the sender: who the triage context says this is, or "+ sender rule" */
+  .sender-chip {
+    font: inherit; font-size: 11.5px; line-height: 1.35; cursor: pointer; margin-left: 6px;
+    padding: 1px 7px; border-radius: 4px; vertical-align: 1px;
+    border: 1px dashed var(--border); background: none; color: var(--muted);
+  }
+  .sender-chip:hover { border-color: var(--accent); border-style: solid; color: var(--accent); }
+  .sender-chip.known { border-style: solid; background: var(--chip); color: var(--text); }
+  .sender-chip.ignored { cursor: default; border-style: solid; background: var(--amber-bg); color: var(--amber); }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .field.check label { display: inline-flex; gap: 8px; align-items: center; font-size: 13px; color: var(--text); font-weight: 500; }
   .summary {
     font-size: 14.5px;
     color: var(--text);
@@ -675,6 +686,7 @@
     .toast { bottom: 136px; }
 
     .modal { width: 100vw; height: 100dvh; max-height: none; border-radius: 0; padding: 16px; }
+    .field-row { grid-template-columns: minmax(0, 1fr); gap: 0; }
     .field input[type="text"], .field input[type="date"], .field textarea, .field select { font-size: 16px; }
   }
 
@@ -696,10 +708,11 @@
 
 <header>
   <div>
-    <h1>Email Triage Review <span class="version" id="app-version">v2026.09.22 - 22-59</span></h1>
+    <h1>Email Triage Review <span class="version" id="app-version">v2026.10.03 - 14-00</span></h1>
     <div class="meta" id="header-meta">No session loaded</div>
   </div>
   <div class="header-actions">
+    <a class="btn" href="/rules.html" title="Senders, labels, topics, ignore list and rules triage follows">Rules</a>
     <button class="btn theme-toggle" id="btn-theme" title="Toggle light / dark mode">🌙 Dark</button>
     <!-- Shown when the sign-in expired mid-review: a NEW tab, so in-memory edits survive here. -->
     <a class="btn btn-primary hidden" id="link-signin" href="/api/auth/login" target="_blank" rel="noopener">Sign in</a>
@@ -820,6 +833,54 @@
   </div>
 </div>
 
+<!-- ── Sender rule modal: edits the triage context, not the session ──── -->
+<div class="modal-overlay hidden" id="sender-overlay">
+  <div class="modal">
+    <h3 id="s-title">Sender rule</h3>
+    <div class="field-hint" style="margin:-8px 0 14px">Saved to the triage rules straight away — pa-email-triage uses it from its next run. Nothing in this review changes.</div>
+    <div class="field">
+      <label for="s-name">Name *</label>
+      <input type="text" id="s-name" maxlength="120">
+    </div>
+    <div class="field">
+      <label for="s-match">Email addresses or @domains * — one per line</label>
+      <textarea id="s-match" style="min-height:64px"></textarea>
+      <div class="field-hint" id="s-match-hint"></div>
+    </div>
+    <div class="field">
+      <label for="s-rel">Relationship</label>
+      <input type="text" id="s-rel" maxlength="300" placeholder="e.g. Strata manager for P3">
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label for="s-prop">Property</label>
+        <select id="s-prop"></select>
+      </div>
+      <div class="field">
+        <label for="s-label">Gmail label</label>
+        <select id="s-label"></select>
+      </div>
+    </div>
+    <div class="field">
+      <label for="s-notes">Notes</label>
+      <textarea id="s-notes" style="min-height:64px" placeholder="What triage should know about this sender"></textarea>
+    </div>
+    <div class="field check">
+      <label><input type="checkbox" id="s-ignore"> Ignore this sender — never a task from them</label>
+    </div>
+    <div class="field">
+      <label for="s-rule">Add a rule (optional)</label>
+      <textarea id="s-rule" style="min-height:56px" placeholder="A free-form rule triage follows literally"></textarea>
+    </div>
+    <div class="modal-error hidden" id="s-error"></div>
+    <div class="modal-actions">
+      <a class="btn" href="/rules.html#senders" target="_blank" rel="noopener" style="margin-right:auto">All rules ↗</a>
+      <button class="btn" id="s-cancel">Cancel</button>
+      <button class="btn btn-primary" id="s-apply">Confirm</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -837,7 +898,7 @@
    "pending-review", applies the "reviewed" ones and leaves "skipped" alone.
 
    Tasks live in Google Tasks (Gabriel & Arina Gmail) and Microsoft To Do
-   (Outlook) — there is no Notion, no group and no task tag anywhere. A task's
+   (Outlook) — there is no group and no task tag anywhere. A task's
    identity is its `key` ("<provider>:<listId>:<taskId>") and an email points at
    one with `existingTaskKey`.
 
@@ -1125,6 +1186,153 @@ async function writeSession(text, etag) {
     throw new Error(((body && body.error) || `server answered ${res.status}`) + details);
   }
   return etagOf(res);
+}
+
+// ── Triage context: /api/context (the rules pa-email-triage follows) ──
+// Read once on load to show who each sender is. A sender-rule Confirm saves
+// at once — re-read, apply the change, PUT with X-Context-ETag, and on a lost
+// race (412) redo the same change on the fresh copy. Separate from the
+// session: nothing here touches the review, it applies from the next run.
+let ctx = null;   // the context, or null when it could not be read
+
+async function readContext() {
+  const res = await fetch("/api/context", { cache: "no-store" });
+  if (res.status === 401) throw new AuthRequired("Sign in required");
+  if (!res.ok) throw new Error(`Could not load the triage rules (${res.status})`);
+  return { doc: await res.json(), etag: res.headers.get("X-Context-ETag") || res.headers.get("ETag") };
+}
+async function loadContext() {
+  try {
+    ctx = (await readContext()).doc;
+  } catch (err) {
+    ctx = null;
+    if (!(err instanceof AuthRequired)) showToast(err.message);
+  }
+  if (session) renderReview();
+}
+async function saveContextChange(change) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const fresh = await readContext();
+    change(fresh.doc);
+    const res = await fetch("/api/context", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "If-Match": fresh.etag, "X-Context-ETag": fresh.etag },
+      body: JSON.stringify(fresh.doc),
+    });
+    if (res.status === 401) throw new AuthRequired("Sign in required");
+    if (res.status === 412) continue;
+    const body = await res.json().catch(() => null);
+    if (!res.ok) {
+      const details = body && Array.isArray(body.details) ? body.details : [];
+      throw new Error(((body && body.error) || `server answered ${res.status}`) + (details.length ? `\n${details.join("\n")}` : ""));
+    }
+    ctx = body;
+    return;
+  }
+  throw new Error("The triage rules kept changing — try again");
+}
+
+/** The context's sender for an address: exact address first, then its @domain. */
+function senderFor(address) {
+  if (!ctx || !address) return null;
+  const addr = address.trim().toLowerCase();
+  const domain = addr.slice(addr.indexOf("@"));
+  return ctx.senders.find((s) => s.match.includes(addr)) || ctx.senders.find((s) => s.match.includes(domain)) || null;
+}
+function ignoredFor(address) {
+  if (!ctx || !address) return null;
+  const addr = address.trim().toLowerCase();
+  const domain = addr.slice(addr.indexOf("@"));
+  return ctx.ignore.find((x) => [addr, domain].includes(x.pattern.trim().toLowerCase())) || null;
+}
+function propertyShort(id) {
+  const p = ctx && ctx.properties.find((x) => x.id === id);
+  return p ? `${p.id} ${p.name}` : id;
+}
+
+/** The chip after the sender: what the rules say about them, or "+ sender rule". */
+function senderChipHTML(i) {
+  if (!ctx) return "";
+  const { email } = parseFrom(session.emails[i].from);
+  if (!email) return "";
+  const s = senderFor(email);
+  const ignored = ignoredFor(email);
+  const chip = s
+    ? `<button type="button" class="sender-chip known" data-sender="${i}" title="${esc(`Sender rule: ${s.name}${s.notes ? ` — ${s.notes}` : ""} · click to edit`)}">👤 ${esc([s.relationship || s.name, s.property && propertyShort(s.property)].filter(Boolean).join(" · "))}</button>`
+    : `<button type="button" class="sender-chip" data-sender="${i}" title="Tell triage who this sender is">+ sender rule</button>`;
+  return chip + (ignored ? `<span class="sender-chip ignored" title="${esc(ignored.reason || "On the ignore list")}">ignored</span>` : "");
+}
+
+let senderEdit = null;   // { senderId, address } while the sender modal is open
+
+function openSenderEditor(i) {
+  const e = session.emails[i];
+  const { name, email } = parseFrom(e.from);
+  const address = email.toLowerCase();
+  const s = senderFor(address);
+  const domain = address.slice(address.indexOf("@"));
+  senderEdit = { senderId: s ? s.id : null, address };
+
+  $("s-title").textContent = s ? `Sender rule — ${s.name}` : "New sender rule";
+  $("s-name").value = s ? s.name : name || address;
+  $("s-match").value = (s ? s.match : [address]).join("\n");
+  $("s-match-hint").textContent = s && !s.match.includes(address)
+    ? `Matched through ${domain} — every address at that domain.`
+    : `Use ${domain} instead to match everyone at that domain.`;
+  $("s-rel").value = s ? s.relationship : "";
+  $("s-prop").innerHTML = [["", "— none —"], ...ctx.properties.map((p) => [p.id, `${p.id} ${p.name}`])]
+    .map(([v, t]) => `<option value="${esc(v)}" ${(s && s.property || "") === v ? "selected" : ""}>${esc(t)}</option>`).join("");
+  $("s-label").innerHTML = [["", "— by content —"], ...ctx.labels.filter((l) => !l.manualOnly).map((l) => [l.name, l.name])]
+    .map(([v, t]) => `<option value="${esc(v)}" ${(s && s.label || "") === v ? "selected" : ""}>${esc(t)}</option>`).join("");
+  $("s-notes").value = s ? s.notes : "";
+  $("s-ignore").checked = !!ignoredFor(address);
+  $("s-rule").value = "";
+  $("s-error").classList.add("hidden");
+  $("s-apply").disabled = false;
+  $("sender-overlay").classList.remove("hidden");
+  $("s-rel").focus();
+}
+function closeSenderEditor() {
+  $("sender-overlay").classList.add("hidden");
+  senderEdit = null;
+}
+async function applySenderEditor() {
+  if (!senderEdit) return;
+  const values = {
+    name: $("s-name").value.trim(),
+    match: $("s-match").value.split(/[\n,]/).map((x) => x.trim().toLowerCase()).filter(Boolean),
+    relationship: $("s-rel").value.trim(),
+    property: $("s-prop").value || null,
+    label: $("s-label").value || null,
+    notes: $("s-notes").value.trim(),
+  };
+  const ignore = $("s-ignore").checked;
+  const rule = $("s-rule").value.trim();
+  const showError = (msg) => { $("s-error").textContent = msg; $("s-error").classList.remove("hidden"); };
+  if (!values.name || values.match.length === 0) { showError("A name and at least one address are required."); return; }
+
+  const { senderId, address } = senderEdit;
+  $("s-apply").disabled = true;
+  try {
+    await saveContextChange((doc) => {
+      const at = senderId ? doc.senders.findIndex((x) => x.id === senderId) : -1;
+      if (at >= 0) doc.senders[at] = { ...doc.senders[at], ...values };
+      else doc.senders.push({ id: `sender-${crypto.randomUUID().slice(0, 8)}`, ...values });
+      // The ignore entry may be the address or its @domain — unticking removes either.
+      const domain = address.slice(address.indexOf("@"));
+      const hits = (x) => [address, domain].includes(x.pattern.trim().toLowerCase());
+      if (ignore && !doc.ignore.some(hits)) doc.ignore.push({ id: `ignore-${crypto.randomUUID().slice(0, 8)}`, pattern: address, reason: `Ignored from the review page — ${values.name}` });
+      if (!ignore) doc.ignore = doc.ignore.filter((x) => !hits(x));
+      if (rule) doc.rules.push({ id: `rule-${crypto.randomUUID().slice(0, 8)}`, text: rule, enabled: true });
+    });
+    closeSenderEditor();
+    renderReview();
+    showToast("Rules saved — triage uses them from its next run");
+  } catch (err) {
+    showError(err instanceof AuthRequired ? "Signed out — sign in (header link) and press Confirm again." : err.message);
+    if (err instanceof AuthRequired) setSignedOut();
+    $("s-apply").disabled = false;
+  }
 }
 
 /** Signed out → landing. The header "Sign in" link (new tab) is for a sign-in
@@ -1591,6 +1799,8 @@ function renderEmails() {
       ui.labelPicker = ui.labelPicker === i ? null : i;
       renderReview();
     }));
+  $("emails-list").querySelectorAll("[data-sender]").forEach((btn) =>
+    btn.addEventListener("click", () => openSenderEditor(+btn.dataset.sender)));
   $("emails-list").querySelectorAll("[data-flag]").forEach((btn) =>
     btn.addEventListener("click", () => {
       const e = session.emails[+btn.dataset.flag];
@@ -1763,7 +1973,7 @@ function emailRowHTML(i) {
       </div>
       <div class="cell-main">
         <div class="subject">${esc(e.subject)}${e.newInThread ? `<span class="badge-inline">🆕 new email in thread</span>` : ""}</div>
-        <div class="from-line">${esc(name)} ${email ? `<span class="from-email">&lt;${esc(email)}&gt;</span>` : ""}</div>
+        <div class="from-line">${esc(name)} ${email ? `<span class="from-email">&lt;${esc(email)}&gt;</span>` : ""}${senderChipHTML(i)}</div>
         <div class="summary">${esc(e.summary)}</div>
         ${labelRowHTML(i)}
       </div>
@@ -2231,7 +2441,7 @@ function applyModal() {
 }
 
 // ── Wire up static buttons & boot ─────────────────────────────────────
-$("btn-reload").addEventListener("click", loadSession);
+$("btn-reload").addEventListener("click", async () => { await loadSession(); if (signedIn) await loadContext(); });
 $("btn-signout").addEventListener("click", signOut);
 $("btn-theme").addEventListener("click", toggleTheme);
 $("btn-add-task").addEventListener("click", () => {
@@ -2253,6 +2463,11 @@ $("m-notes").addEventListener("input", renderModalDiff);
 $("modal-overlay").addEventListener("click", (ev) => {
   if (ev.target === $("modal-overlay")) closeModal();
 });
+$("s-cancel").addEventListener("click", closeSenderEditor);
+$("s-apply").addEventListener("click", applySenderEditor);
+$("sender-overlay").addEventListener("click", (ev) => {
+  if (ev.target === $("sender-overlay")) closeSenderEditor();
+});
 
 // The label picker is a plain popover: anything else closes it.
 document.addEventListener("click", (ev) => {
@@ -2262,6 +2477,7 @@ document.addEventListener("click", (ev) => {
   renderReview();
 });
 document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape" && senderEdit) { closeSenderEditor(); return; }
   if (ev.key === "Escape" && ui.labelPicker !== null) { ui.labelPicker = null; renderReview(); }
 });
 ["scroll", "resize"].forEach((evt) => window.addEventListener(evt, (ev) => {
@@ -2277,6 +2493,7 @@ document.addEventListener("keydown", (ev) => {
   initSignIn();
   render();
   await loadSession();
+  if (signedIn) await loadContext();
 })();
 </script>
 </body>

@@ -1,17 +1,8 @@
 import type { Config } from "@netlify/functions";
-import { json, requireUser, respond, sameOrigin } from "../lib/auth.ts";
+import { json, normaliseEtag, requireUser, respond, sameOrigin } from "../lib/auth.ts";
 import { checkSession, type Session } from "../lib/contract.ts";
 import { checkPageWrite } from "../lib/session-ops.ts";
 import { readDoc, writeDoc } from "../lib/store.ts";
-
-/**
- * Netlify's CDN rewrites the `ETag` it serves when it compresses a response
- * (`"abc"` → `"abc-df"`, or weakened), so the raw Blobs etag also travels in
- * `X-Session-ETag`, which the CDN leaves alone. Both sides are normalised anyway.
- */
-function normaliseEtag(value: string): string {
-  return value.trim().replace(/^W\//, "").replace(/-[a-z]+"$/, '"');
-}
 
 async function get(): Promise<Response> {
   const stored = await readDoc("session");

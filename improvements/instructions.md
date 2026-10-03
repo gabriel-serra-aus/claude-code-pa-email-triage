@@ -164,8 +164,10 @@ newTasks and groups is unchanged. The session is too large to move in one call, 
 granular and the skills never read or write the whole JSON. The connector validates everything:
 on a `VALIDATION:` error, fix the named field and resend that batch.
 
-Still local and unchanged: `task-context.md` and `triage-summary.md`. Their folder is now
-`PA/Email Triage/` in the workspace — replace every `Personal Assistance/email-triage/` path.
+Still local and unchanged: `triage-summary.md`. Its folder is now `PA/Email Triage/` in the
+workspace — replace every `Personal Assistance/email-triage/` path. (Superseded 3 Oct 2026:
+`task-context.md` is no longer a file — read the triage context with the connector's
+`context_get` tool; Gabriel edits it on the app's Rules page.)
 Remove every reference to `C:\Users\gabri\Documents\Claude Code\Code\pa-email-triage\` and to
 `triage-session.schema.jsonc`; the connector enforces the contract instead.
 

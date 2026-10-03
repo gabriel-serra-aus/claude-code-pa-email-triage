@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import { beforeEach, describe, it } from "node:test";
-import { SESSION_COOKIE, env, pageType, requireUser, sameOrigin, signSession, verifySession } from "../netlify/lib/auth.ts";
+import { SESSION_COOKIE, env, landingFor, pageType, requireUser, sameOrigin, signSession, verifySession } from "../netlify/lib/auth.ts";
 
 const NOW = new Date("2026-09-01T00:00:00.000Z");
 const DAY = 86400000;
@@ -70,7 +70,12 @@ describe("request helpers", () => {
     assert.equal(sameOrigin(new Request(url)), false);
   });
 
-  it("pageType only passes gabriel and gna", () => {
-    assert.deepEqual(["gabriel", "gna", "GNA", "//evil.example", "", null].map(pageType), ["gabriel", "gna", null, null, null, null]);
+  it("pageType only passes gabriel, gna and rules", () => {
+    assert.deepEqual(["gabriel", "gna", "rules", "GNA", "//evil.example", "", null].map(pageType), ["gabriel", "gna", "rules", null, null, null, null]);
+  });
+
+  it("landingFor sends rules to the Rules page and the rest to the review page", () => {
+    assert.deepEqual(["rules", "gna", "gabriel", null].map((t) => landingFor(pageType(t))),
+      ["/rules.html", "/triage-review.html?type=gna", "/triage-review.html?type=gabriel", "/triage-review.html"]);
   });
 });

@@ -16,7 +16,7 @@ Works in any browser, phones and iPads included. **Sign in with Google** — onl
 
 ## 1. The loop and the two skills
 
-Everything is exchanged through **one session** in Netlify Blobs (store `triage`, key `session`). The page reaches it through `/api/session`; the two skills through the `triage-session` MCP connector (`/mcp/<secret>`). Nothing else touches the store.
+Everything is exchanged through **one session** in Netlify Blobs (store `triage`, key `session`; the triage rules sit beside it under `context`, §6). The page reaches it through `/api/session`; the two skills through the `triage-session` MCP connector (`/mcp/<secret>`). Nothing else touches the store.
 
 ```mermaid
 flowchart LR
@@ -40,16 +40,18 @@ flowchart LR
 | 2. Review | **this page** (Gabriel) | `GET /api/session` | `PUT /api/session`: `decision` blocks, `newTasks`, `groups.<tab>` | `reviewed` (Confirm & Save) or `skipped` (Skip) for **that tab only** — the other tab stays `pending-review` until it gets its own Confirm or Skip |
 | 3. Save | **pa-email-triage-save** (Cowork skill) | `session_status` gate: **only once neither group is `pending-review`**; then `session_get_work` for every group whose status is `reviewed` | task apps (create/update/complete/cancel), Outlook/Gmail (keep or archive, star, labels); `session_record_outcomes` + `session_finish_group` | `processed` or `processed-with-errors` for that group; `skipped` groups stay `skipped` |
 
-**Input** of the page = the session as published by pa-email-triage. **Output** = the same session with `decision` blocks, `newTasks` and `groups.<gabriel|gabriel-arina>.status: "reviewed"` or `"skipped"` — which is the entire input of pa-email-triage-save. **Each group has its own status and is decided independently**: Gabriel can be confirmed while Gabriel & Arina is skipped, and vice-versa — but the save skill only runs once **both** have been decided (no group left `pending-review`). **There is no session-level status** — `groups.gabriel.status` and `groups["gabriel-arina"].status` are the only two, and `groups` never has a third key. The page talks to nothing but `/api/session`; the whole JSON is loaded, mutated in place and written back, so every field it does not know about is preserved — and the server enforces who may change what (§4).
+**Input** of the page = the session as published by pa-email-triage. **Output** = the same session with `decision` blocks, `newTasks` and `groups.<gabriel|gabriel-arina>.status: "reviewed"` or `"skipped"` — which is the entire input of pa-email-triage-save. **Each group has its own status and is decided independently**: Gabriel can be confirmed while Gabriel & Arina is skipped, and vice-versa — but the save skill only runs once **both** have been decided (no group left `pending-review`). **There is no session-level status** — `groups.gabriel.status` and `groups["gabriel-arina"].status` are the only two, and `groups` never has a third key. The page reads and writes the session only through `/api/session` (its one other call is `/api/context`, §6); the whole JSON is loaded, mutated in place and written back, so every field it does not know about is preserved — and the server enforces who may change what (§4).
 
 Two mailboxes → two review queues (tabs):
 
-| Mailbox | `email.source` | Tab | Task group rule |
+| Mailbox | `email.source` | Tab | Task backend (`provider`) |
 |---|---|---|---|
-| Gabriel's Outlook | `outlook` | **Gabriel** | task may be in any group **except** "Gabriel & Arina" |
-| Gabriel & Arina Gmail | `gmail` | **Gabriel & Arina** | task **locked** to group "Gabriel & Arina" |
+| Gabriel's Outlook | `outlook` | **Gabriel** | Microsoft To Do (`todo`) |
+| Gabriel & Arina Gmail | `gmail` | **Gabriel & Arina** | Google Tasks (`gtasks`) |
 
-Existing Notion tasks and manually added tasks land on a tab by their `group` ("Gabriel & Arina" → that tab, anything else → Gabriel).
+One backend per mailbox, no cross-posting, no list picking. Existing and manually added tasks land on a tab by their `provider`. A task's identity is its `key` (`"<provider>:<listId>:<taskId>"`); an email points at one with `existingTaskKey`. There are no groups and no task tags.
+
+The triage **rules** (who matters, what to track and ignore, which Gmail labels exist) live in the same site — see §6.
 
 ---
 
@@ -57,15 +59,15 @@ Existing Notion tasks and manually added tasks land on a tab by their `group` ("
 
 - **Landing** — **Sign in with Google** (full-page redirect, `?type=` survives it). A signed-in browser goes straight to the session; no session yet → "No session yet — run pa-email-triage."; a Google account that is not allowed → "This Google account is not allowed." The header has **Reload** (re-fetch; in-memory edits on pending tabs are lost) and **Sign out** (this browser only).
 - **Review** (`pending-review`) — per tab:
-  1. **Emails** — from, subject, date/age, Claude's summary, 🚩 if `isFlagged`, source badge, deep link (`suggestedTask.link`, else built from `id`: `outlook.live.com/mail/0/inbox/id/…` or `mail.google.com/mail/u/0/#inbox/…`). Filter by category. Each row has a **Category** ribbon and an **Action** ribbon (§3). Emails already matched to a Notion task show **✓ Tracked** instead of a category.
-  2. **Existing Notion tasks** for this tab — Open / Done / Cancelled select + **Edit** (task editor with live diff against Notion).
+  1. **Emails** — from, subject, date/age, Claude's summary, 🚩 if `isFlagged`, source badge, deep link (`suggestedTask.link`, else built from `id`: `outlook.live.com/mail/0/inbox/id/…` or `mail.google.com/mail/u/0/#inbox/…`). Filter by category. Each row has a **Category** ribbon and an **Action** ribbon (§3). Emails already matched to a task show **✓ Tracked** instead of a category. Each head's from-line carries a **sender chip** (§6).
+  2. **Open tasks** for this tab (Google Tasks or To Do) — Open / Done / Cancelled select + **Edit** (task editor with live diff against the task as fetched).
   3. **New tasks** — **+ Add task**; editable/deletable until confirmed.
   4. **Sticky bar** — counts for the tab (tasks to create / to flag / to archive / task updates, done, cancelled, edited, new), **Skip — <tab>** and **Confirm & Save — <tab>**.
 - **Reviewed** (`reviewed`) — read-only "waiting for pa-email-triage-save".
 - **Skipped** (`skipped`) — read-only "pa-email-triage-save will leave it alone", with a **Reopen for review** button that puts the tab back to `pending-review` (only possible while the save skill hasn't run).
 - **Processed** (`processed` / `processed-with-errors`) — read-only outcome list: one row per email, existing task and new task with the outcome the save skill stamped (first of `outcome | result | applied | processed` on the item; text containing "fail" is red). Without an outcome field the badge falls back to the decision ("Archive", "completed", "created"…).
 
-Light/dark toggle, remembered in `localStorage` (`triage-theme`).
+The header also has a **Rules** link to `rules.html` (§6). Light/dark toggle, remembered in `localStorage` (`triage-theme`, shared by both pages).
 
 ---
 
@@ -73,7 +75,7 @@ Light/dark toggle, remembered in `localStorage` (`triage-theme`).
 
 **The category is the only thing Gabriel decides; it drives the action, and the action is exactly what the save skill will do.** Both are one-click icon ribbons, never dropdowns; there is no "undecided" state, so Confirm is always available. Changing the category resets the action to that category's default.
 
-### Emails without a Notion task
+### Emails without a task
 
 | Category | Actions (first = default) |
 |---|---|
@@ -85,34 +87,34 @@ Every email ends up either **kept in the inbox** or **archived** — there is no
 
 The **star (Gmail) / flag (Outlook) is its own property** — a toggle beside the action ribbon that writes `decision.flagged` (default = the mailbox's current `isFlagged`; no action ever changes it, so "Keep in inbox" leaves an unflagged email unflagged). It is independent of the action: an archived email can stay starred. Gmail rows also show the message's **system labels** (Important, Updates, Promotions…) as muted read-only chips next to the editable user labels.
 
-- `create-task` — the task created is `decision.task` (Gabriel's edit) → else `suggestedTask` (Claude's) → else a **fallback** from subject + summary, built on Confirm. **Edit task** opens the editor (title, description, group, tags, due date); **Reset** returns to the suggestion. The email deep link is carried on the task automatically.
+- `create-task` — the task created is `decision.task` (Gabriel's edit) → else `suggestedTask` (Claude's) → else a **fallback** from subject + summary, built on Confirm. It goes to the mailbox's backend (Gmail → Google Tasks, Outlook → To Do). **Edit task** opens the editor (title, your notes, due date); **Reset** returns to the suggestion. The email deep link is carried on the task automatically. The `Mount:` / `Arura:` / `Huberts:` title prefix (from the email's `properties/*` label) is shown as a hint and applied only to a fallback task.
 - `flag` / `archive` — nothing under the ribbon.
 
-### Emails tracked in Notion (`existingTaskUrl` set)
+### Emails with a task (`existingTaskKey` set)
 
-No category. Actions: `update-task` (default) · `complete-task` · `cancel-task`.
+No category. Actions: `update-task` (default) · `complete-task` · `cancel-task`. A matched task that is already completed is read-only end to end: `archive` is the only action.
 
-- All three refresh the task's **auto comment** (below). `complete-task` / `cancel-task` also archive the email.
+- `complete-task` / `cancel-task` also archive the email; both save the task as completed, Cancelled adds a "Cancelled DD Mon: …" line.
 - Complete/cancel is **mirrored** both ways with the matched task (`existingTasks[].decision.complete / .cancel`): Done/Cancelled on the task sets the action on every email matched to it, and vice versa.
+- A head that is `newInThread` repoints the task's link at itself (`edits.link`, shown as "link → latest email").
 - **Open & edit task** jumps to the editor for the matched task.
 
-### Task description = Gabriel's part + Claude's briefing
+### Task description = Gabriel's notes + Claude's auto block
 
-Split at the literal marker line `-- auto comment --`:
+Two plain-text sections:
 
-- **Above** — Gabriel's own text, never touched.
-- **Below** — Claude's briefing: one `DD Mon: summary` line per email matched to the task, **replaced on every run**.
+- **`-- notes`** — Gabriel's own text; the only half the editor exposes.
+- **`-- auto --`** — written by pa-email-triage on every run (one-line brief, a dated line per message, latest-email link, `[triage]` footer); shown muted and read-only.
 
-On Confirm, any tracked task whose briefing would change gets `decision.edits.notes` = full new description (Gabriel's part + fresh briefing). If Gabriel edited the description by hand in this session, that edit wins and the briefing is not regenerated.
+`decision.edits.notes` is always the whole new description (both halves).
 
 ### Existing-task edits
 
-The editor records only **changed** fields versus Notion: `decision.edits = { title?, notes?, group?, tags?, dueDate? }`, or `null` if nothing changed. It shows a live diff (unchanged muted, added green, removed red).
+**Task titles are written once, at creation** — the title of an existing task is read-only. The editor records only **changed** fields versus the task as fetched: `decision.edits = { notes?, dueDate?, link? }` (never `title`), or `null` if nothing changed. It shows a live diff (unchanged muted, added green, removed red).
 
 ### Hard rules
 
-- Gmail-sourced tasks → group locked to "Gabriel & Arina"; Outlook-sourced tasks → never that group. Enforced in the editor and re-applied on Confirm. Manual new tasks are unrestricted (their group decides the tab).
-- Fixed lists: groups `Work | Gabriel | Gabriel & Arina | New Ideas`; tags `Admin | Finance | Health | Property | Dev | Research | Errand`.
+- The tab decides the backend: Gabriel → To Do, Gabriel & Arina → Google Tasks. New tasks take the provider of the tab they are added on.
 - `decision.isTask` is derived: `true` only when `emailAction === "create-task"`.
 
 ---
@@ -144,40 +146,53 @@ Top-level keys, for orientation only: `generatedAt`, `mailboxes`, `gmailLabels`,
 
 ### What pa-email-triage must produce
 
-`generatedAt`, `groups.gabriel` / `groups["gabriel-arina"]` both `pending-review`, `gmailLabels`, `emails[]` with `id`, `source`, `category`, `summary` (Gmail: `labels`), and for each email either `existingTaskUrl` (pointing at an entry in `existingTasks[]`) or an optional `suggestedTask` (Gmail: `tags` = `labels`). `decision` blocks may be omitted — the page fills them.
+`generatedAt`, `groups.gabriel` / `groups["gabriel-arina"]` both `pending-review`, `gmailLabels`, `emails[]` with `id`, `source`, `threadId`, `threadRole`, `inInbox`, `summary` (Gmail: `labels`), and on each head a `category` plus either `existingTaskKey` (the `key` of an entry in `existingTasks[]`) or an optional `suggestedTask`. `existingTasks[]` carry the current Google Tasks / To Do values. `decision` blocks may be omitted — the page fills them. It reads its rules with `context_get` (§6).
 
-### Gmail labels ≡ Notion Tags
+### Gmail labels are email-only
 
-Gmail user labels and the Notion **Tags** property share one namespace (identical names). On the page a Gmail email shows its labels as clickable chips; for an email linked to a task (create-task or tracked) the labels and the task's tags are **one value** — editing either side updates the other (`syncTaskFromLabels` / `syncLabelsFromTags`). The task editor offers `gmailLabels ∪ base tags`. The save skill applies the label diff (`labels` → `decision.labels`) to Gmail and the tags to Notion, creating missing labels / tag options as needed. Outlook emails have no labels.
+Gmail user labels belong to the email, not the task: `labels` (now) and `decision.labels` (wanted). The head row shows the wanted labels as chips (× removes, **+ label** adds from `gmailLabels` ∪ already set). Their only task-side effect is the title prefix of a fallback task. The save skill applies the diff (`labels` → `decision.labels`) to Gmail. Outlook emails have no labels.
 
 ### What pa-email-triage-save must honour
 
 - **Gate first:** if `groups.gabriel.status` or `groups["gabriel-arina"].status` is `pending-review`, stop and touch nothing — Gabriel must Confirm or Skip every tab before anything is applied.
-- Then act **per group**: for each `groups.<tab>` whose `status === "reviewed"`, apply that group's items only — `gabriel` = emails with `source !== "gmail"` + tasks whose `group !== "Gabriel & Arina"`; `gabriel-arina` = Gmail emails + tasks in "Gabriel & Arina". Never touch a group that is `skipped` (its `decision` blocks are drafts Gabriel chose not to apply — leave the status `skipped`) or already `processed`.
-- After processing, set `groups.<tab>.status` to `"processed"` / `"processed-with-errors"` and `groups.<tab>.processedAt`. Never write a session-level `status`.
-- Gmail emails of a reviewed `gabriel-arina` group (every action, archive included): add `decision.labels − labels`, remove `labels − decision.labels` (create a Gmail label if missing). Task tags: create any missing option on the Notion Tags property before writing.
-- Legacy files (no `groups`, only `status` / `reviewedGroups`; or `groups` plus an orphan `reviewedGroups` stamp from the old page) are migrated by the page on load (`ensureGroups`); the save skill only needs to understand `groups`.
-- Email actions decide inbox vs archive only: `archive` → archive; `flag` → keep in inbox; `create-task` → create the Notion task from `decision.task ?? suggestedTask` (the page guarantees one of them), keep in inbox; `update-task` → apply the matched task's `decision.edits`, keep in inbox; `complete-task` / `cancel-task` → set the task status (Done / Cancelled) **and** archive the email. Never delete, never reply.
+- Then act **per group**: for each `groups.<tab>` whose `status === "reviewed"`, apply that group's items only — `gabriel` = emails with `source !== "gmail"` + tasks with `provider: "todo"`; `gabriel-arina` = Gmail emails + tasks with `provider: "gtasks"`. Never touch a group that is `skipped` (its `decision` blocks are drafts Gabriel chose not to apply — leave the status `skipped`) or already `processed`.
+- After processing, `session_finish_group` sets `groups.<tab>.status` to `"processed"` / `"processed-with-errors"` and stamps `processedAt`. Never write a session-level `status`.
+- Gmail emails of a reviewed `gabriel-arina` group (every action, archive included): add `decision.labels − labels`, remove `labels − decision.labels`.
+- Email actions decide inbox vs archive only: `archive` → archive; `flag` → keep in inbox; `create-task` → create the task from `decision.task ?? suggestedTask` (the page guarantees one of them) in the mailbox's backend, keep in inbox; `update-task` → apply the matched task's `decision.edits`, keep in inbox; `complete-task` / `cancel-task` → complete the task (cancel adds a "Cancelled DD Mon: …" line) **and** archive the email. Never delete, never reply.
 - Star/flag, every email of a reviewed group: `decision.flagged !== isFlagged` → Gmail add/remove `STARRED` / Outlook `flag_email` flagged / notFlagged; equal → nothing. Never touch `systemLabels`.
-- Existing tasks: apply `edits` (only changed fields present), then `complete` / `cancel`.
-- `newTasks`: create each in Notion.
-- Stamp a string outcome on each processed item (`outcome`), plus the group-level status/`processedAt` described above.
+- Existing tasks: re-read the live task, apply `edits` (only `notes` / `dueDate` / `link`, never a title; keep the `[triage]` footer), then `complete` / `cancel`. A task already completed is left alone.
+- `newTasks`: create each in the backend named by its `provider`.
+- Stamp a string outcome on each processed item (`outcome`, via `session_record_outcomes`), plus the group-level status described above.
 
 ---
 
-## 6. Repo contents
+## 6. Triage rules — `rules.html`, sender chip, `/api/context`
+
+The **triage context** is what pa-email-triage follows when it classifies: properties, tracked senders, the Gmail label registry + label guide, tracked topics, the ignore list, free-form rules and run settings. It lives in the same Blobs store (key `context`) and replaces the old `task-context.md`. It is **separate from the session** — editing it never changes the review on screen; it applies from the next pa-email-triage run.
+
+- **`rules.html`** ("Triage Rules", header **Rules** link; deep links such as `rules.html#senders`) — tabs **Senders**, **Properties**, **Gmail labels** (+ label guide), **Topics**, **Ignore list**, **Rules** (ordered, each on/off), **Run settings**, **History** (view or restore any replaced version). Every change saves at once: re-read, apply, `PUT`; a `412` re-applies the same change to the fresh copy (3 attempts), so two open pages never overwrite each other. Sign-in from this page returns to it (`/api/auth/login?type=rules`).
+- **Sender chip** on the review page — after each head's sender: `👤 relationship · P# property` when the sender matches a rule (exact address first, then `@domain`), else **+ sender rule**; an amber **ignored** chip when the sender is on the ignore list. Clicking opens the **Sender rule** panel (name, addresses / `@domains`, relationship, property, Gmail label, notes, **Ignore this sender**, **Add a rule**). **Confirm** saves to the context immediately, the same way as the Rules page. Disabled on locked tabs.
+- **`/api/context`** (signed in) — `GET` → the context + `X-Context-ETag` (`404` if never loaded); `GET ?history` → replaced versions, newest first; `GET ?version=<key>` → one of them. `PUT` replaces the whole document with `X-Context-ETag` (`428` missing, `412` stale, `422` invalid with `details[]`, `403` bad `Origin`); the server stamps `updatedAt` / `updatedBy`, keeps the replaced version under `context-history/<iso>` and prunes to the newest 50. `PUT` never creates — the first copy is loaded once with `netlify blobs:set triage context --input <file>`.
+- **`context_get`** (connector, read-only) — `format: "markdown"` (default) → `{ updatedAt, markdown }`, the document step 1 follows; `"json"` → the raw context. `NO_CONTEXT` if it was never loaded.
+
+The real context names people, addresses and properties — it never goes in this repo; tests use a synthetic one.
+
+---
+
+## 7. Repo contents
 
 | File | Purpose |
 |---|---|
 | `triage-session.schema.jsonc` | Annotated example of the session — the single contract every skill and the page must follow |
-| `public/triage-review.html` | the whole page — vanilla JS + CSS in one file |
-| `netlify/lib/` | `contract.ts` (zod mirror of the schema), `session-ops.ts` (pure session logic), `store.ts` (Blobs), `auth.ts` (cookie, env) |
-| `netlify/functions/` | `/api/auth/login`, `/api/auth/callback`, `/api/auth/logout`, `/api/session`, `/mcp/:secret` |
-| `test/` | `node --test` unit tests + a **synthetic** fixture (never real mail) |
+| `public/triage-review.html` | the review page — vanilla JS + CSS in one file |
+| `public/rules.html` | the Triage Rules page — same conventions |
+| `netlify/lib/` | `contract.ts` (zod mirror of the schema), `session-ops.ts` (pure session logic), `context.ts` (triage context: zod schema, checks, markdown rendering), `store.ts` (Blobs), `auth.ts` (cookie, env) |
+| `netlify/functions/` | `/api/auth/login`, `/api/auth/callback`, `/api/auth/logout`, `/api/session`, `/api/context`, `/mcp/:secret` |
+| `test/` | `node --test` unit tests + **synthetic** fixtures (never real mail or a real context) |
 | `netlify.toml`, `package.json`, `tsconfig.json` | site config, the six dependencies, strict TypeScript (`noEmit`) |
 | `CLAUDE.md` | guidance for Claude Code (decision model, contract, editing tips) |
 | `improvements.md` | backlog + change log — add to it for deliberate UX changes |
 | `improvements/` | the functional / technical spec and runbook of the Netlify move |
 | `.mcp.json` | Outlook MCP server used by Claude Code in this repo |
 
-Environment variables (Netlify UI, never in the repo): `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ALLOWED_EMAILS`, `SESSION_SECRET`, `MCP_SECRET`. Checks: `npx tsc --noEmit`, `node --test`, and `node --check` on the page's extracted `<script>`. Local run: `npx netlify dev` on `http://localhost:8888` (needs `netlify link`; the emulated store is per machine). The earlier Next.js app (Apr–Aug 2026), the `localhost:8765` server scripts and the local-file / File System Access version of the page (Aug–Sep 2026) remain in git history only.
+Environment variables (Netlify UI, never in the repo): `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ALLOWED_EMAILS`, `SESSION_SECRET`, `MCP_SECRET`. Checks: `npx tsc --noEmit`, `node --test`, and `node --check` on each page's extracted `<script>`. Local run: `npx netlify dev` on `http://localhost:8888` (needs `netlify link`; the emulated store is per machine). The earlier Next.js app (Apr–Aug 2026), the `localhost:8765` server scripts and the local-file / File System Access version of the page (Aug–Sep 2026) remain in git history only.

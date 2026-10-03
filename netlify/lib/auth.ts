@@ -83,12 +83,29 @@ export function clearOauthCookie(): string {
   return `${OAUTH_COOKIE}=; HttpOnly; Secure; SameSite=Lax; Path=/api/auth; Max-Age=0`;
 }
 
-/** `?type=` survives the sign-in round trip only as one of these — never a free-form return target. */
-export function pageType(value: string | null): "gabriel" | "gna" | null {
-  return value === "gabriel" || value === "gna" ? value : null;
+/** `?type=` survives the sign-in round trip only as one of these — never a free-form return target.
+ *  `rules` returns to the Rules page instead of the review page. */
+export function pageType(value: string | null): "gabriel" | "gna" | "rules" | null {
+  return value === "gabriel" || value === "gna" || value === "rules" ? value : null;
 }
 
 export const PAGE = "/triage-review.html";
+export const RULES_PAGE = "/rules.html";
+
+/** Where the sign-in round trip lands for a `pageType`. */
+export function landingFor(type: ReturnType<typeof pageType>): string {
+  if (type === "rules") return RULES_PAGE;
+  return type ? `${PAGE}?type=${type}` : PAGE;
+}
+
+/**
+ * Netlify's CDN rewrites the `ETag` it serves when it compresses a response
+ * (`"abc"` → `"abc-df"`, or weakened), so the raw Blobs etag also travels in
+ * `X-Session-ETag` / `X-Context-ETag`, which the CDN leaves alone. Both sides are normalised anyway.
+ */
+export function normaliseEtag(value: string): string {
+  return value.trim().replace(/^W\//, "").replace(/-[a-z]+"$/, '"');
+}
 
 /** Every API response is `no-store`. */
 export function respond(status: number, body: string | null = null, headers: Record<string, string> = {}): Response {

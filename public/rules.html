@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Same policy as the review page: inline only, connect-src 'self'. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src data:; base-uri 'none'; form-action 'self'">
+<title>Triage Rules</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --card: #ffffff; --border: #dfe3e8; --text: #1f2733; --muted: #6b7685;
+    --accent: #2563eb; --accent-dark: #1d4ed8; --green: #15803d; --green-bg: #e8f7ee;
+    --red: #b91c1c; --red-bg: #fdecec; --amber: #b45309; --amber-bg: #fef3e2;
+    --subtle: #fafbfc; --chip: #eceff3; --hover: #f0f2f5; --overlay: rgba(15, 23, 42, .45);
+    --toast-bg: #1f2733; --toast-text: #ffffff; --on-dark: #ffffff;
+    color-scheme: light;
+  }
+  [data-theme="dark"] {
+    --bg: #0f1419; --card: #1a2029; --border: #2c3542; --text: #e6eaf0; --muted: #93a0b1;
+    --accent: #3b82f6; --accent-dark: #60a5fa; --green: #4ade80; --green-bg: #14301f;
+    --red: #f87171; --red-bg: #3a1a1a; --amber: #fbbf24; --amber-bg: #3a2a10;
+    --subtle: #1f2631; --chip: #2a3340; --hover: #242c38; --overlay: rgba(0, 0, 0, .6);
+    --toast-bg: #e6eaf0; --toast-text: #0f1419; --on-dark: #0f1419;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Segoe UI", system-ui, -apple-system, sans-serif; font-size: 14px; color: var(--text); background: var(--bg); }
+  button { font: inherit; cursor: pointer; }
+  a { color: var(--accent); }
+  .hidden { display: none !important; }
+
+  header { background: var(--card); border-bottom: 1px solid var(--border); padding: 14px 22px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  header h1 { margin: 0; font-size: 19px; }
+  .meta { color: var(--muted); font-size: 12.5px; margin-top: 3px; }
+  .version { color: var(--muted); font-size: 11.5px; font-weight: 500; white-space: nowrap; }
+  .header-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn { border: 1px solid var(--border); background: var(--card); border-radius: 7px; padding: 7px 14px; color: var(--text); }
+  a.btn { display: inline-block; text-decoration: none; }
+  .btn:hover { background: var(--hover); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .btn-primary:hover:not(:disabled) { background: var(--accent-dark); }
+  .btn-small { padding: 4px 10px; font-size: 12.5px; border-radius: 6px; }
+  .btn-danger { color: var(--red); }
+
+  main { max-width: 1280px; margin: 0 auto; padding: 18px 22px; }
+  .screen-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 40px; max-width: 640px; margin: 40px auto; text-align: center; }
+  .screen-note { color: var(--muted); margin-top: 12px; }
+
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+  .tab { border: 1px solid var(--border); background: var(--card); color: var(--text); border-radius: 8px; padding: 8px 14px; display: inline-flex; gap: 8px; align-items: center; }
+  .tab.active { background: var(--accent); border-color: var(--accent); color: var(--on-dark); font-weight: 600; }
+  .tab .count { font-size: 12px; opacity: .8; }
+
+  .section { background: var(--card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .section-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 16px; background: var(--subtle); border-bottom: 1px solid var(--border); }
+  .section-title { font-weight: 700; font-size: 15px; }
+  .section-intro { color: var(--muted); font-size: 12.5px; padding: 10px 16px 0; line-height: 1.45; }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .toolbar input[type="search"] { font: inherit; font-size: 13px; padding: 5px 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); color: var(--text); min-width: 200px; }
+
+  .row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; padding: 11px 16px; border-bottom: 1px solid var(--border); align-items: start; }
+  .row:last-child { border-bottom: none; }
+  .row.off { opacity: .55; }
+  .row-title { font-weight: 600; }
+  .row-sub { font-size: 12.5px; color: var(--muted); margin-top: 3px; line-height: 1.45; overflow-wrap: anywhere; white-space: pre-line; }
+  .row-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  .chip { display: inline-block; background: var(--chip); border-radius: 4px; padding: 1px 7px; font-size: 11.5px; color: var(--muted); margin: 2px 3px 0 0; }
+  .chip.label { background: var(--accent); color: #fff; }
+  .chip.warn { background: var(--amber-bg); color: var(--amber); }
+  .empty { padding: 18px; color: var(--muted); }
+  .guide { margin: 0; padding: 12px 16px; white-space: pre-wrap; font: inherit; font-size: 13px; line-height: 1.5; border-top: 1px solid var(--border); }
+
+  .modal-overlay { position: fixed; inset: 0; background: var(--overlay); display: flex; align-items: center; justify-content: center; z-index: 50; }
+  .modal { background: var(--card); border-radius: 12px; width: min(600px, 94vw); max-height: 90vh; overflow-y: auto; padding: 22px 24px; }
+  .modal h3 { margin: 0 0 14px; }
+  .field { margin-bottom: 13px; }
+  .field > label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
+  .field input[type="text"], .field textarea, .field select { width: 100%; font: inherit; font-size: 13.5px; padding: 7px 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--card); color: var(--text); }
+  .field textarea { min-height: 90px; resize: vertical; }
+  .field.check label { display: inline-flex; gap: 8px; align-items: center; font-size: 13.5px; color: var(--text); font-weight: 500; }
+  .field-hint { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+  .modal-error { color: var(--red); font-size: 12.5px; margin-top: 8px; white-space: pre-line; }
+  pre.json { font-size: 12px; background: var(--subtle); border: 1px solid var(--border); border-radius: 7px; padding: 10px; max-height: 55vh; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--toast-bg); color: var(--toast-text); border-radius: 8px; padding: 10px 18px; font-size: 13.5px; opacity: 0; pointer-events: none; transition: all .25s ease; z-index: 60; max-width: 90vw; }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  @media (max-width: 600px) {
+    header { padding: 12px; }
+    header h1 { font-size: 16px; }
+    main { padding: 12px; }
+    .row { grid-template-columns: minmax(0, 1fr); padding: 11px 12px; }
+    .row-actions { justify-content: flex-start; }
+    .toolbar input[type="search"] { min-width: 0; flex: 1; }
+    .modal { width: 100vw; height: 100dvh; max-height: none; border-radius: 0; padding: 16px; }
+    .field input[type="text"], .field textarea, .field select { font-size: 16px; }
+    .screen-card { padding: 24px 18px; margin: 24px auto; }
+  }
+  @media (hover: none), (pointer: coarse) {
+    .btn-small, .tab { min-height: 36px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Triage Rules <span class="version" id="app-version">v2026.10.03 - 14-00</span></h1>
+    <div class="meta" id="header-meta">Not loaded</div>
+  </div>
+  <div class="header-actions">
+    <a class="btn" href="/triage-review.html">← Review</a>
+    <button class="btn" id="btn-theme" title="Toggle light / dark mode">🌙 Dark</button>
+    <button class="btn hidden" id="btn-reload">Reload</button>
+    <button class="btn hidden" id="btn-signout">Sign out</button>
+  </div>
+</header>
+
+<main>
+  <div id="screen-landing" class="screen-card hidden">
+    <h2>Triage rules</h2>
+    <p>Who matters, what to track, what to ignore and which Gmail labels exist — what
+       <b>pa-email-triage</b> follows on every run.</p>
+    <a class="btn btn-primary" id="btn-open" href="/api/auth/login?type=rules">Sign in with Google</a>
+    <div class="screen-note" id="landing-note"></div>
+  </div>
+
+  <div id="screen-rules" class="hidden">
+    <div class="tabs" id="tabs"></div>
+    <div class="section">
+      <div class="section-header">
+        <div class="section-title" id="section-title"></div>
+        <div class="toolbar" id="toolbar"></div>
+      </div>
+      <div class="section-intro" id="section-intro"></div>
+      <div id="list"></div>
+    </div>
+  </div>
+</main>
+
+<div class="modal-overlay hidden" id="modal-overlay">
+  <div class="modal">
+    <h3 id="modal-title"></h3>
+    <div id="modal-body"></div>
+    <div class="modal-error hidden" id="m-error"></div>
+    <div class="modal-actions">
+      <button class="btn" id="m-cancel">Cancel</button>
+      <button class="btn btn-primary" id="m-apply">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+/* ══════════════════════════════════════════════════════════════════════
+   Triage Rules — the editor for the triage context (what task-context.md
+   used to be). Reads GET /api/context and saves each change at once with
+   PUT /api/context + X-Context-ETag, the whole document every time. A save
+   that loses a race (412) re-reads and re-applies the same change, so two
+   open pages never overwrite each other. Every replaced version is kept on
+   the server (History tab). pa-email-triage reads it via `context_get` on
+   its next run — nothing here changes the session under review.
+   ══════════════════════════════════════════════════════════════════════ */
+
+const $ = (id) => document.getElementById(id);
+function esc(s) {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+function showToast(msg) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(showToast._timer);
+  showToast._timer = setTimeout(() => t.classList.remove("show"), 3200);
+}
+function formatDate(iso) {
+  if (!iso) return "never";
+  const d = new Date(iso);
+  if (isNaN(d)) return iso;
+  return `${String(d.getDate()).padStart(2, "0")} ${d.toLocaleString("en-AU", { month: "short" })} ${d.getFullYear()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+function newId(prefix) { return `${prefix}-${crypto.randomUUID().slice(0, 8)}`; }
+function lines(text) { return String(text || "").split(/[\n,]/).map((s) => s.trim()).filter(Boolean); }
+
+// ── Theme (shares the review page's stored choice) ────────────────────
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  $("btn-theme").textContent = theme === "dark" ? "☀️ Light" : "🌙 Dark";
+  try { localStorage.setItem("triage-theme", theme); } catch { /* optional */ }
+}
+function initTheme() {
+  let theme = null;
+  try { theme = localStorage.getItem("triage-theme"); } catch { /* optional */ }
+  applyTheme(theme || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
+}
+
+// ── Store: /api/context ───────────────────────────────────────────────
+class AuthRequired extends Error {}
+class NoContext extends Error {}
+class Conflict extends Error {}
+function etagOf(res) { return res.headers.get("X-Context-ETag") || res.headers.get("ETag"); }
+
+async function readContext() {
+  const res = await fetch("/api/context", { cache: "no-store" });
+  if (res.status === 401) throw new AuthRequired("Sign in required");
+  if (res.status === 404) throw new NoContext("No context yet");
+  if (!res.ok) throw new Error(`Could not load the rules (${res.status})`);
+  return { doc: await res.json(), etag: etagOf(res) };
+}
+async function writeContext(doc, etag) {
+  const res = await fetch("/api/context", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", "If-Match": etag, "X-Context-ETag": etag },
+    body: JSON.stringify(doc),
+  });
+  if (res.status === 401) throw new AuthRequired("Sign in required");
+  if (res.status === 412) throw new Conflict("Context changed");
+  const body = await res.json().catch(() => null);   // a 5xx may not carry JSON
+  if (!res.ok) {
+    const details = body && Array.isArray(body.details) ? body.details : [];
+    const err = new Error((body && body.error) || `server answered ${res.status}`);
+    err.details = details;
+    throw err;
+  }
+  return { doc: body, etag: etagOf(res) };
+}
+/** Re-read, apply `change` to the fresh copy, write; a lost race is retried with the same change. */
+async function saveChange(change) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const fresh = await readContext();
+    change(fresh.doc);
+    try {
+      const saved = await writeContext(fresh.doc, fresh.etag);
+      ctx = saved.doc;
+      ctxETag = saved.etag;
+      return;
+    } catch (err) {
+      if (!(err instanceof Conflict)) throw err;
+    }
+  }
+  throw new Error("The rules kept changing — reload and try again");
+}
+
+// ── State ─────────────────────────────────────────────────────────────
+let ctx = null, ctxETag = null, signedIn = false;
+let ui = { tab: "senders", search: "" };
+let modal = null;   // { onSave(form) } while a modal is open
+
+// ── Field kinds for the generic editor ────────────────────────────────
+function propertyOptions() { return [["", "— none —"], ...ctx.properties.map((p) => [p.id, `${p.id} ${p.name}`])]; }
+function labelOptions() { return [["", "— by content —"], ...ctx.labels.filter((l) => !l.manualOnly).map((l) => [l.name, l.name])]; }
+function labelOrNone() { return [["", "— none —"], ...ctx.labels.filter((l) => !l.manualOnly).map((l) => [l.name, l.name])]; }
+
+/** Each list: its key in the context, how a row reads, and its editor fields. */
+const KINDS = {
+  senders: {
+    title: "Senders", one: "sender", idPrefix: "sender",
+    intro: "Emails from anyone here are always evaluated for a task. Matched on the exact address first, then the @domain.",
+    blank: () => ({ name: "", match: [], relationship: "", property: null, label: null, notes: "" }),
+    fields: [
+      { key: "name", label: "Name *", type: "text", required: true },
+      { key: "match", label: "Email addresses or @domains * — one per line", type: "list", required: true, hint: "e.g. name@agency.com.au, or @agency.com.au for the whole company" },
+      { key: "relationship", label: "Relationship", type: "text", hint: "e.g. Strata manager for P3" },
+      { key: "property", label: "Property", type: "select", options: propertyOptions },
+      { key: "label", label: "Gmail label", type: "select", options: labelOptions },
+      { key: "notes", label: "Notes", type: "textarea" },
+    ],
+    row: (s) => ({
+      title: s.name,
+      sub: [s.relationship, s.notes].filter(Boolean).join("\n"),
+      chips: [...s.match.map((m) => ({ text: m })), ...(s.property ? [{ text: propertyName(s.property) }] : []), ...(s.label ? [{ text: s.label, cls: "label" }] : [])],
+      search: [s.name, s.relationship, s.notes, ...s.match].join(" "),
+    }),
+  },
+  properties: {
+    title: "Properties", one: "property",
+    intro: "The properties reference. The label and title prefix are what tasks and emails about the property get.",
+    blank: () => ({ id: nextPropertyId(), name: "", address: "", managedBy: "", label: null, titlePrefix: "", notes: "" }),
+    fields: [
+      { key: "id", label: "ID", type: "text", readonly: true },
+      { key: "name", label: "Short name *", type: "text", required: true },
+      { key: "address", label: "Address", type: "text" },
+      { key: "managedBy", label: "Managed by", type: "text" },
+      { key: "label", label: "Gmail label", type: "select", options: labelOrNone },
+      { key: "titlePrefix", label: "Task title prefix", type: "text", raw: true, hint: 'Include the trailing space, e.g. "Mount: "' },
+      { key: "notes", label: "Notes", type: "textarea" },
+    ],
+    row: (p) => ({
+      title: `${p.id} — ${p.name}`,
+      sub: [p.address, p.managedBy && `Managed by ${p.managedBy}`, p.notes].filter(Boolean).join("\n"),
+      chips: [...(p.label ? [{ text: p.label, cls: "label" }] : []), ...(p.titlePrefix ? [{ text: `prefix "${p.titlePrefix}"` }] : [])],
+      search: [p.id, p.name, p.address, p.managedBy, p.notes].join(" "),
+    }),
+  },
+  labels: {
+    title: "Gmail labels", one: "label",
+    intro: "The only labels triage may apply (shared Gmail). The ID must be the Gmail label ID — triage never resolves a label by name and never creates one.",
+    blank: () => ({ id: "", name: "", useFor: "", manualOnly: false }),
+    fields: [
+      { key: "name", label: "Label name *", type: "text", required: true, hint: "Exactly as in Gmail, e.g. Properties/Mount st" },
+      { key: "id", label: "Gmail label ID *", type: "text", required: true, hint: "e.g. Label_1" },
+      { key: "useFor", label: "Use for", type: "text" },
+      { key: "manualOnly", label: "Manual only — triage never applies it", type: "check" },
+    ],
+    row: (l) => ({
+      title: l.name,
+      sub: l.useFor,
+      chips: [{ text: l.id }, ...(l.manualOnly ? [{ text: "manual only", cls: "warn" }] : [])],
+      search: [l.name, l.id, l.useFor].join(" "),
+    }),
+  },
+  topics: {
+    title: "Topics", one: "topic", idPrefix: "topic",
+    intro: "Subject or body keywords that force a task regardless of sender.",
+    blank: () => ({ name: "", match: [], notes: "" }),
+    fields: [
+      { key: "name", label: "Topic *", type: "text", required: true },
+      { key: "match", label: "Keywords * — one per line", type: "list", required: true, plain: true },
+      { key: "notes", label: "Notes", type: "textarea" },
+    ],
+    row: (t) => ({ title: t.name, sub: t.notes, chips: t.match.map((m) => ({ text: m })), search: [t.name, t.notes, ...t.match].join(" ") }),
+  },
+  ignore: {
+    title: "Ignore list", one: "ignore entry", idPrefix: "ignore",
+    intro: "Never a task from these — checked before everything else. Labels may still apply.",
+    blank: () => ({ pattern: "", reason: "" }),
+    fields: [
+      { key: "pattern", label: "Sender or pattern *", type: "text", required: true, hint: "An address, an @domain, or a description like \"Marketing blasts\"" },
+      { key: "reason", label: "Reason", type: "text" },
+    ],
+    row: (x) => ({ title: x.pattern, sub: x.reason, chips: [], search: [x.pattern, x.reason].join(" ") }),
+  },
+  rules: {
+    title: "Rules", one: "rule", idPrefix: "rule", ordered: true,
+    intro: "Free-form rules, followed literally and in this order. They override everything else. Switched-off rules are kept but not sent to triage.",
+    blank: () => ({ text: "", enabled: true }),
+    fields: [
+      { key: "text", label: "Rule *", type: "textarea", required: true },
+      { key: "enabled", label: "Switched on", type: "check" },
+    ],
+    row: (r) => ({ title: r.text, sub: "", chips: r.enabled ? [] : [{ text: "off", cls: "warn" }], search: r.text, off: !r.enabled }),
+  },
+  settings: {
+    title: "Run settings", one: "setting", idPrefix: "setting",
+    intro: "How a triage run is set up.",
+    blank: () => ({ name: "", value: "" }),
+    fields: [
+      { key: "name", label: "Setting *", type: "text", required: true },
+      { key: "value", label: "Value", type: "text" },
+    ],
+    row: (s) => ({ title: s.name, sub: s.value, chips: [], search: [s.name, s.value].join(" ") }),
+  },
+};
+const TAB_ORDER = ["senders", "properties", "labels", "topics", "ignore", "rules", "settings", "history"];
+
+function propertyName(id) {
+  const p = ctx.properties.find((x) => x.id === id);
+  return p ? `${p.id} ${p.name}` : id;
+}
+function nextPropertyId() {
+  const n = Math.max(0, ...ctx.properties.map((p) => +p.id.slice(1) || 0)) + 1;
+  return `P${n}`;
+}
+
+// ── Loading & sign-in ─────────────────────────────────────────────────
+async function load() {
+  try {
+    const loaded = await readContext();
+    ctx = loaded.doc;
+    ctxETag = loaded.etag;
+    signedIn = true;
+    $("landing-note").textContent = "";
+  } catch (err) {
+    ctx = null;
+    if (err instanceof AuthRequired) { signedIn = false; $("landing-note").textContent = ""; }
+    else if (err instanceof NoContext) { signedIn = true; $("landing-note").textContent = "No rules loaded yet — the one-off import has not run."; }
+    else { signedIn = true; showToast(err.message); }
+  }
+  render();
+}
+async function signOut() {
+  const res = await fetch("/api/auth/logout", { method: "POST" });
+  if (!res.ok) { showToast(`Sign out failed (${res.status})`); return; }
+  ctx = null;
+  signedIn = false;
+  render();
+}
+
+// ── Rendering ─────────────────────────────────────────────────────────
+function render() {
+  $("btn-reload").classList.toggle("hidden", !signedIn);
+  $("btn-signout").classList.toggle("hidden", !signedIn);
+  $("btn-open").classList.toggle("hidden", signedIn);
+  $("screen-landing").classList.toggle("hidden", !!ctx);
+  $("screen-rules").classList.toggle("hidden", !ctx);
+  if (!ctx) { $("header-meta").textContent = "Not loaded"; return; }
+  $("header-meta").textContent = `Updated ${formatDate(ctx.updatedAt)}${ctx.updatedBy ? ` by ${ctx.updatedBy}` : ""} · applies from the next triage run`;
+  renderTabs();
+  if (ui.tab === "history") renderHistory(); else renderList();
+}
+
+function renderTabs() {
+  $("tabs").innerHTML = TAB_ORDER.map((k) => {
+    const title = k === "history" ? "History" : KINDS[k].title;
+    const count = k === "history" ? "" : `<span class="count">${ctx[k].length}</span>`;
+    return `<button class="tab ${ui.tab === k ? "active" : ""}" data-tab="${k}">${esc(title)}${count}</button>`;
+  }).join("");
+  $("tabs").querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => {
+    ui.tab = b.dataset.tab;
+    ui.search = "";
+    render();
+  }));
+}
+
+function renderList() {
+  const kind = KINDS[ui.tab];
+  $("section-title").textContent = kind.title;
+  $("section-intro").textContent = kind.intro;
+  $("toolbar").innerHTML =
+    `<input type="search" id="search" placeholder="Search ${esc(kind.title.toLowerCase())}" value="${esc(ui.search)}">` +
+    (ui.tab === "labels" ? `<button class="btn btn-small" id="btn-guide">Edit label guide</button>` : "") +
+    `<button class="btn btn-small btn-primary" id="btn-add">+ Add ${esc(kind.one)}</button>`;
+  $("search").addEventListener("input", (ev) => { ui.search = ev.target.value; renderRows(); });
+  $("btn-add").addEventListener("click", () => openItemEditor(ui.tab, -1));
+  if (ui.tab === "labels") $("btn-guide").addEventListener("click", openGuideEditor);
+  renderRows();
+}
+
+function renderRows() {
+  const kind = KINDS[ui.tab];
+  const items = ctx[ui.tab];
+  const q = ui.search.trim().toLowerCase();
+  const shown = items.map((it, i) => ({ it, i, r: kind.row(it) })).filter(({ r }) => !q || r.search.toLowerCase().includes(q));
+  const guide = ui.tab === "labels"
+    ? `<pre class="guide">${esc(ctx.labelGuide || "No label guide yet.")}</pre>` : "";
+  $("list").innerHTML = (shown.length === 0
+    ? `<div class="empty">${items.length ? "Nothing matches." : `No ${esc(kind.title.toLowerCase())} yet.`}</div>`
+    : shown.map(({ i, r }) => `
+      <div class="row ${r.off ? "off" : ""}">
+        <div>
+          <div class="row-title">${esc(r.title)}</div>
+          ${r.sub ? `<div class="row-sub">${esc(r.sub)}</div>` : ""}
+          ${r.chips.length ? `<div>${r.chips.map((c) => `<span class="chip ${c.cls || ""}">${esc(c.text)}</span>`).join("")}</div>` : ""}
+        </div>
+        <div class="row-actions">
+          ${kind.ordered ? `<button class="btn btn-small" data-move="${i}" data-dir="-1" title="Move up" ${i === 0 ? "disabled" : ""}>↑</button>
+                            <button class="btn btn-small" data-move="${i}" data-dir="1" title="Move down" ${i === items.length - 1 ? "disabled" : ""}>↓</button>` : ""}
+          <button class="btn btn-small" data-edit="${i}">Edit</button>
+          <button class="btn btn-small btn-danger" data-delete="${i}">Delete</button>
+        </div>
+      </div>`).join("")) + guide;
+
+  $("list").querySelectorAll("[data-edit]").forEach((b) => b.addEventListener("click", () => openItemEditor(ui.tab, +b.dataset.edit)));
+  $("list").querySelectorAll("[data-delete]").forEach((b) => b.addEventListener("click", () => deleteItem(ui.tab, +b.dataset.delete)));
+  $("list").querySelectorAll("[data-move]").forEach((b) => b.addEventListener("click", () => moveItem(ui.tab, +b.dataset.move, +b.dataset.dir)));
+}
+
+// ── Editing ───────────────────────────────────────────────────────────
+function fieldHTML(f, value) {
+  const id = `f-${f.key}`;
+  const hint = f.hint ? `<div class="field-hint">${esc(f.hint)}</div>` : "";
+  if (f.type === "check") {
+    return `<div class="field check"><label><input type="checkbox" id="${id}" ${value ? "checked" : ""}> ${esc(f.label)}</label>${hint}</div>`;
+  }
+  if (f.type === "select") {
+    const opts = f.options().map(([v, t]) => `<option value="${esc(v)}" ${String(value ?? "") === v ? "selected" : ""}>${esc(t)}</option>`).join("");
+    return `<div class="field"><label for="${id}">${esc(f.label)}</label><select id="${id}">${opts}</select>${hint}</div>`;
+  }
+  if (f.type === "textarea" || f.type === "list") {
+    const v = f.type === "list" ? (value || []).join("\n") : (value ?? "");
+    return `<div class="field"><label for="${id}">${esc(f.label)}</label><textarea id="${id}">${esc(v)}</textarea>${hint}</div>`;
+  }
+  return `<div class="field"><label for="${id}">${esc(f.label)}</label><input type="text" id="${id}" value="${esc(value ?? "")}" ${f.readonly ? "readonly" : ""}>${hint}</div>`;
+}
+function readField(f) {
+  const el = $(`f-${f.key}`);
+  if (f.type === "check") return el.checked;
+  if (f.type === "select") return el.value === "" ? null : el.value;
+  if (f.type === "list") return f.plain ? lines(el.value) : lines(el.value).map((s) => s.toLowerCase());
+  return f.raw ? el.value : el.value.trim();
+}
+
+function openModal(title, bodyHTML, onSave) {
+  $("modal-title").textContent = title;
+  $("modal-body").innerHTML = bodyHTML;
+  $("m-error").classList.add("hidden");
+  $("m-apply").disabled = false;
+  $("m-apply").textContent = "Save";
+  modal = { onSave };
+  $("modal-overlay").classList.remove("hidden");
+  const first = $("modal-body").querySelector("input:not([readonly]), textarea, select");
+  if (first) first.focus();
+}
+function closeModal() {
+  $("modal-overlay").classList.add("hidden");
+  modal = null;
+}
+function modalError(msg) {
+  $("m-error").textContent = msg;
+  $("m-error").classList.remove("hidden");
+}
+async function applyModal() {
+  if (!modal) return;
+  $("m-apply").disabled = true;
+  try {
+    await modal.onSave();
+    closeModal();
+    render();
+    showToast("Saved — applies from the next triage run");
+  } catch (err) {
+    if (err instanceof AuthRequired) modalError("Signed out — sign in again in another tab, then press Save.");
+    else modalError(err.message + (err.details && err.details.length ? "\n" + err.details.join("\n") : ""));
+    $("m-apply").disabled = false;
+  }
+}
+
+/** `index` -1 = add. Items are found again by id in the fresh copy, so a concurrent edit elsewhere is kept. */
+function openItemEditor(listKey, index) {
+  const kind = KINDS[listKey];
+  const current = index >= 0 ? ctx[listKey][index] : { ...kind.blank() };
+  const itemId = index >= 0 ? current.id : null;
+  openModal(`${index >= 0 ? "Edit" : "Add"} ${kind.one}`, kind.fields.map((f) => fieldHTML(f, current[f.key])).join(""), async () => {
+    const values = {};
+    for (const f of kind.fields) values[f.key] = readField(f);
+    for (const f of kind.fields) {
+      if (f.required && (Array.isArray(values[f.key]) ? values[f.key].length === 0 : !values[f.key])) throw new Error(`${f.label.replace(/ \*.*$/, "")} is required.`);
+    }
+    await saveChange((doc) => {
+      const list = doc[listKey];
+      if (itemId === null) {
+        const item = { ...kind.blank(), ...values };
+        if (kind.idPrefix) item.id = newId(kind.idPrefix);
+        list.push(item);
+      } else {
+        const at = list.findIndex((x) => x.id === itemId);
+        if (at < 0) throw new Error("Someone deleted this item meanwhile — reload.");
+        list[at] = { ...list[at], ...values };
+      }
+    });
+  });
+}
+
+function openGuideEditor() {
+  openModal("Edit label guide", `<div class="field"><label for="f-guide">How a label is chosen when the sender has none (markdown)</label><textarea id="f-guide" style="min-height:260px">${esc(ctx.labelGuide)}</textarea></div>`, async () => {
+    const text = $("f-guide").value;
+    await saveChange((doc) => { doc.labelGuide = text; });
+  });
+}
+
+async function deleteItem(listKey, index) {
+  const item = ctx[listKey][index];
+  const name = KINDS[listKey].row(item).title;
+  if (!confirm(`Delete "${name.slice(0, 80)}"? It stays in History.`)) return;
+  await runSave(() => saveChange((doc) => { doc[listKey] = doc[listKey].filter((x) => x.id !== item.id); }), "Deleted");
+}
+
+async function moveItem(listKey, index, dir) {
+  const id = ctx[listKey][index].id;
+  await runSave(() => saveChange((doc) => {
+    const list = doc[listKey];
+    const at = list.findIndex((x) => x.id === id);
+    const to = at + dir;
+    if (at < 0 || to < 0 || to >= list.length) return;
+    [list[at], list[to]] = [list[to], list[at]];
+  }), "Moved");
+}
+
+async function runSave(fn, done) {
+  try {
+    await fn();
+    render();
+    showToast(done);
+  } catch (err) {
+    showToast(err instanceof AuthRequired ? "Signed out — sign in and try again" : `Not saved — ${err.message}${err.details && err.details[0] ? ` (${err.details[0]})` : ""}`);
+  }
+}
+
+// ── History ───────────────────────────────────────────────────────────
+async function renderHistory() {
+  $("section-title").textContent = "History";
+  $("section-intro").textContent = "Every save keeps the version it replaced (the last 50). Restoring one saves it as the newest version — nothing is lost.";
+  $("toolbar").innerHTML = "";
+  $("list").innerHTML = `<div class="empty">Loading…</div>`;
+  const res = await fetch("/api/context?history", { cache: "no-store" });
+  if (!res.ok) { $("list").innerHTML = `<div class="empty">Could not load the history (${res.status}).</div>`; return; }
+  const { versions } = await res.json();
+  if (ui.tab !== "history") return;
+  $("list").innerHTML = versions.length === 0 ? `<div class="empty">No earlier versions yet.</div>` : versions.map((v) => `
+    <div class="row">
+      <div><div class="row-title">Replaced ${esc(formatDate(v.replacedAt))}</div></div>
+      <div class="row-actions">
+        <button class="btn btn-small" data-view="${esc(v.key)}">View</button>
+        <button class="btn btn-small" data-restore="${esc(v.key)}">Restore</button>
+      </div>
+    </div>`).join("");
+  $("list").querySelectorAll("[data-view]").forEach((b) => b.addEventListener("click", () => viewVersion(b.dataset.view)));
+  $("list").querySelectorAll("[data-restore]").forEach((b) => b.addEventListener("click", () => restoreVersion(b.dataset.restore)));
+}
+async function fetchVersion(key) {
+  const res = await fetch(`/api/context?version=${encodeURIComponent(key)}`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`Could not load that version (${res.status})`);
+  return res.json();
+}
+async function viewVersion(key) {
+  try {
+    const doc = await fetchVersion(key);
+    openModal(`Version replaced ${formatDate(key.split("/")[1])}`, `<pre class="json">${esc(JSON.stringify(doc, null, 2))}</pre>`, async () => {});
+    $("m-apply").textContent = "Close";
+  } catch (err) { showToast(err.message); }
+}
+async function restoreVersion(key) {
+  if (!confirm("Restore this version? The current rules go into History first.")) return;
+  await runSave(async () => {
+    const old = await fetchVersion(key);
+    await saveChange((doc) => { for (const k of Object.keys(doc)) delete doc[k]; Object.assign(doc, old); });
+  }, "Restored");
+}
+
+// ── Wire up & boot ────────────────────────────────────────────────────
+$("btn-theme").addEventListener("click", () => applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
+$("btn-reload").addEventListener("click", load);
+$("btn-signout").addEventListener("click", signOut);
+$("m-cancel").addEventListener("click", closeModal);
+$("m-apply").addEventListener("click", () => { applyModal(); });
+$("modal-overlay").addEventListener("click", (ev) => { if (ev.target === $("modal-overlay")) closeModal(); });
+document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && modal) closeModal(); });
+
+(function boot() {
+  initTheme();
+  // Deep link from the review page: rules.html#senders, #rules …
+  const hash = location.hash.slice(1);
+  if (TAB_ORDER.includes(hash)) ui.tab = hash;
+  render();
+  load();
+})();
+</script>
+</body>
+</html>

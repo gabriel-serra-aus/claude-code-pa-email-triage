@@ -14,7 +14,7 @@ Today the review page only runs in desktop Edge/Chrome (File System Access API) 
 
 Everything Gabriel decides and how he decides it. The decision model, the two tabs, per-tab Confirm / Skip / Reopen, thread rows, labels, task editing, the action vocabulary and the session JSON shape stay exactly as described in [CLAUDE.md](../CLAUDE.md) and [triage-session.schema.jsonc](../triage-session.schema.jsonc). Only **where the session is stored and how each step reaches it** changes.
 
-Still local to the PC, untouched: `task-context.md`, `triage-summary.md`, and the mailbox / task MCP servers (`outlook-mcp`, `gabrielandarina-google-tasks`).
+Still local to the PC, untouched: `triage-summary.md` and the mailbox / task MCP servers (`outlook-mcp`, `gabrielandarina-google-tasks`). (`task-context.md` was local at the time; since 3 Oct 2026 the triage context lives in the app — Blobs key `context`, edited on `rules.html`, read by step 1 with `context_get`.)
 
 ## 3. Actors
 

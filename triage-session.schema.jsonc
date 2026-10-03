@@ -24,7 +24,7 @@
 //  accepts step 1's keys; the page's PUT may change only decisions, newTasks and
 //  its own status moves; outcome / processedAt come only from step 3's tools).
 //
-//  ─── Tasks live in Google Tasks / Microsoft To Do — there is NO Notion ──────
+//  ─── Tasks live in Google Tasks / Microsoft To Do ──────────────────────────
 //  One backend per mailbox, no cross-posting and no list picking:
 //     Gmail (Gabriel & Arina) → Google Tasks, default list   (provider "gtasks")
 //     Outlook                 → Microsoft To Do, default list (provider "todo")

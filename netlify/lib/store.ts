@@ -1,8 +1,9 @@
 // Netlify Blobs access. Only functions come through here — never the page, never the skills.
 import { getStore } from "@netlify/blobs";
 
-/** `session` = live, what the page sees · `draft` = step 1's work in progress. */
-export type DocKey = "session" | "draft";
+/** `session` = live, what the page sees · `draft` = step 1's work in progress ·
+ *  `context` = the triage context · `context-history/<iso>` = each replaced context. */
+export type DocKey = "session" | "draft" | "context" | `context-history/${string}`;
 export type WriteCondition = { onlyIfMatch: string } | { onlyIfNew: true } | Record<string, never>;
 
 function store() {
@@ -29,4 +30,9 @@ export async function writeDoc(key: DocKey, doc: unknown, cond: WriteCondition =
 
 export async function deleteDoc(key: DocKey): Promise<void> {
   await store().delete(key);
+}
+
+/** Keys under a prefix, sorted. */
+export async function listKeys(prefix: string): Promise<string[]> {
+  return (await store().list({ prefix })).blobs.map((b) => b.key).sort();
 }

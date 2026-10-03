@@ -13,7 +13,7 @@ import {
   type Task,
 } from "./contract.ts";
 
-export type OpErrorCode = "NO_SESSION" | "NO_DRAFT" | "VALIDATION" | "WRONG_STATUS" | "CONFLICT";
+export type OpErrorCode = "NO_SESSION" | "NO_DRAFT" | "NO_CONTEXT" | "VALIDATION" | "WRONG_STATUS" | "CONFLICT";
 
 /** A refusal the MCP handler turns into `{ isError: true, "<CODE>: <message>" }`. */
 export class OpError extends Error {

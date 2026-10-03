@@ -9,6 +9,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { env, respond } from "../lib/auth.ts";
+import { renderContextMarkdown, type TriageContext } from "../lib/context.ts";
 import { BeginSchema, GroupSchema, type Session } from "../lib/contract.ts";
 import {
   OpError, appendEmails, appendTasks, applyOutcomes, beginDraft, countsOf, extractWork, finishGroup, publishDraft,
@@ -128,6 +129,16 @@ function buildServer(): McpServer {
     description: "Step 3: mark a reviewed (or processed-with-errors) group processed or processed-with-errors. The server stamps processedAt.",
     inputSchema: { group: GroupSchema, status: z.enum(["processed", "processed-with-errors"]) },
   }, ({ group, status }) => answer(() => mutate("session", "NO_SESSION", (live: Session) => finishGroup(live, group, status, new Date()))));
+
+  server.registerTool("context_get", {
+    description: "Step 1: the triage context (properties, tracked senders, Gmail label registry and guide, topics, ignore list, free-form rules, run settings) — what PA/Email Triage/task-context.md used to hold. Read-only: Gabriel edits it on the app's Rules page. format markdown (default) is the document to follow; json is the raw data. NO_CONTEXT if it was never loaded.",
+    inputSchema: { format: z.enum(["markdown", "json"]).optional() },
+  }, ({ format }) => answer(async () => {
+    const stored = await readDoc("context");
+    if (!stored) throw new OpError("NO_CONTEXT", "there is no triage context — stop and tell Gabriel");
+    const ctx = stored.doc as TriageContext;
+    return format === "json" ? ctx : { updatedAt: ctx.updatedAt, markdown: renderContextMarkdown(ctx) };
+  }));
 
   return server;
 }
