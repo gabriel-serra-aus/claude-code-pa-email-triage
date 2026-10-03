@@ -708,7 +708,7 @@
 
 <header>
   <div>
-    <h1>Email Triage Review <span class="version" id="app-version">v2026.10.03 - 14-00</span></h1>
+    <h1>Email Triage Review <span class="version" id="app-version">v2026.10.03 - 14-02</span></h1>
     <div class="meta" id="header-meta">No session loaded</div>
   </div>
   <div class="header-actions">
@@ -1245,6 +1245,12 @@ function ignoredFor(address) {
   const domain = addr.slice(addr.indexOf("@"));
   return ctx.ignore.find((x) => [addr, domain].includes(x.pattern.trim().toLowerCase())) || null;
 }
+/** The sender's address, whether `from` is "Name <addr>" or a bare address ("" when neither). */
+function fromAddress(from) {
+  const { name, email } = parseFrom(from);
+  const addr = (email || name).trim().toLowerCase();
+  return /^[^\s@<>]+@[^\s@<>]+\.[a-z]{2,}$/.test(addr) ? addr : "";
+}
 function propertyShort(id) {
   const p = ctx && ctx.properties.find((x) => x.id === id);
   return p ? `${p.id} ${p.name}` : id;
@@ -1253,7 +1259,7 @@ function propertyShort(id) {
 /** The chip after the sender: what the rules say about them, or "+ sender rule". */
 function senderChipHTML(i) {
   if (!ctx) return "";
-  const { email } = parseFrom(session.emails[i].from);
+  const email = fromAddress(session.emails[i].from);
   if (!email) return "";
   const s = senderFor(email);
   const ignored = ignoredFor(email);
@@ -1268,13 +1274,13 @@ let senderEdit = null;   // { senderId, address } while the sender modal is open
 function openSenderEditor(i) {
   const e = session.emails[i];
   const { name, email } = parseFrom(e.from);
-  const address = email.toLowerCase();
+  const address = fromAddress(e.from);
   const s = senderFor(address);
   const domain = address.slice(address.indexOf("@"));
   senderEdit = { senderId: s ? s.id : null, address };
 
   $("s-title").textContent = s ? `Sender rule — ${s.name}` : "New sender rule";
-  $("s-name").value = s ? s.name : name || address;
+  $("s-name").value = s ? s.name : (email ? name : "") || address;
   $("s-match").value = (s ? s.match : [address]).join("\n");
   $("s-match-hint").textContent = s && !s.match.includes(address)
     ? `Matched through ${domain} — every address at that domain.`
