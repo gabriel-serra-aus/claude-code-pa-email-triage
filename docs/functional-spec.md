@@ -20,6 +20,81 @@ A second page, **`rules.html`**, edits the triage rules step 1 follows.
 
 Nothing in the loop ever deletes, replies to or sends an email, and nothing ever deletes a task.
 
+### 1.1 Moving parts
+
+```
+ Gabriel's PC / Cowork                         Netlify (pa-email-triage.netlify.app)                 Browser
+ ─────────────────────                         ─────────────────────────────────────                 ───────
+ pa-email-triage (skill) ──┐                   /mcp/<secret>  (functions/mcp.ts)                    triage-review.html
+ pa-email-triage-save ─────┼── triage-session ─►  "triage-session" MCP server ──┐                  rules.html
+   (skills on claude.ai)   │   connector           10 tools, every one takes side │                     │
+                           │                                                      ▼                     │ fetch (cookie)
+   reads/writes mail       │                   Netlify Blobs, store "triage" ◄── functions/lib ◄── /api/session
+   and tasks directly:     │                     session-<side>  draft-<side>                       /api/summary
+     outlook-mcp ──────────┤ (local, stdio)      summary-<side>  context-<side>                     /api/context
+     gabrielandarina-      │                     context-history/<side>/<iso>                       /api/auth/*
+       google-tasks ───────┤ (local, stdio)                                                            │
+     Gmail connector ──────┘ (claude.ai)                                                    Google sign-in (OAuth)
+```
+
+| Part | What it is | Where it runs | Where its code / config sits | Talks to |
+|---|---|---|---|---|
+| **`pa-email-triage`** (step 1) | Claude skill: prepare a side's session | Cowork / Claude Code, on Gabriel's PC | Uploaded to claude.ai (skill settings). Master copy kept with the project notes: `PA/Email Triage/_docs/pa-email-triage.SKILL.md` — not in this repo, it names the mailboxes | the mailbox + task MCPs below (read only), the `triage-session` connector |
+| **`pa-email-triage-save`** (step 3) | Claude skill: apply a reviewed session | same | claude.ai; master `PA/Email Triage/_docs/pa-email-triage-save.SKILL.md` | the mailbox + task MCPs (write), the `triage-session` connector |
+| **`outlook-mcp`** | Outlook mail **and** Microsoft To Do for side `gabriel` | local stdio MCP server on Gabriel's PC | its own folder under Gabriel's `mcp-server` directory; registered in the user's Claude Code config | Microsoft Graph |
+| **`gabrielandarina-google-tasks`** | Google Tasks for side `gabriel-arina` | local stdio MCP server on Gabriel's PC | same | Google Tasks API |
+| **Gmail connector** (`mcp__Gmail__*`) | the shared Gmail for side `gabriel-arina` | claude.ai built-in connector | claude.ai connector settings | Gmail API. (`gmail-emails`, Gabriel's personal Gmail, is never used by triage) |
+| **`triage-session` connector** | the only door from the skills to the stored data | Netlify Function `netlify/functions/mcp.ts` at `/mcp/<MCP_SECRET>` | this repo; added in claude.ai as a custom connector with that URL | Netlify Blobs |
+| **Review page** | step 2 | any browser | `public/triage-review.html` | `/api/session`, `/api/summary`, `/api/context`, `/api/auth/*` |
+| **Rules page** | edits a side's triage context | any browser | `public/rules.html` | `/api/context`, `/api/auth/*` |
+| **HTTP API** | the pages' only door to the stored data | Netlify Functions | `netlify/functions/{session,summary,context,auth-*}.ts` | Netlify Blobs, Google OAuth |
+| **Netlify Blobs** | all stored data — sessions, drafts, summaries, contexts, context history | Netlify, site `pa-email-triage`, store `triage` | read/written only through `netlify/lib/store.ts` | — |
+
+**Rules of the road:** the skills never touch the pages or Blobs directly — only the connector. The pages never call a mailbox or task app — only `/api/*`. Only the Functions touch Blobs. There is **no local file** anywhere in the loop (no `triage-session.json`, no `triage-summary.md`, `task-context.md` is a pointer only).
+
+### 1.2 Where each thing lives — and how to look at it
+
+Everything is a JSON document in Netlify Blobs, store **`triage`**, one set per side (§7). Ways to see it, easiest first:
+
+| Thing | Blobs key | Written by | See it in the app | See it in Claude | See it raw (CLI, from this repo after `netlify link`) |
+|---|---|---|---|---|---|
+| **Run summary** | `summary-<side>` → `{ side, generatedAt, publishedAt, markdown }` | step 1, via `session_publish { side, summary }` | review page → **Run summary** panel; or `/api/summary?side=<side>` while signed in | `summary_get { side }` | `npx netlify blobs:get triage summary-gabriel` |
+| **Live session** | `session-<side>` | step 1 (`session_publish`), page (`PUT /api/session`), step 3 (outcome tools) | the review page; or `/api/session?side=<side>` | `session_status { side }` (counts only) | `npx netlify blobs:get triage session-gabriel-arina` |
+| **Draft** (step 1 in progress) | `draft-<side>` | `session_begin` / `session_add_*`; deleted on publish | — | `session_status` → `draft` | `npx netlify blobs:get triage draft-gabriel` |
+| **Triage rules (context)** | `context-<side>` | `rules.html` and the sender panel (`PUT /api/context`) | `rules.html` (G&A) / `rules.html?type=gabriel`; or `/api/context?side=<side>` | `context_get { side }` (markdown, or `format: "json"`) | `npx netlify blobs:get triage context-gabriel` |
+| **Rules history** | `context-history/<side>/<iso>` (newest 50) | `PUT /api/context`, the version it replaced | `rules.html` → **History** tab (view / restore) | — | `npx netlify blobs:list triage --prefix context-history/gabriel/` |
+
+`npx netlify blobs:list triage` lists every key. The Netlify UI (site → Blobs) shows the same store. Add `-O <file>` to `blobs:get` to save to a file — save it **outside** the repo; real sessions and contexts never go in it.
+
+### 1.3 How the two sides are told apart
+
+One value, **`side`** — `gabriel` or `gabriel-arina` — carried end to end. Nothing infers it.
+
+| Layer | How the side is chosen | Enforced by |
+|---|---|---|
+| Skill | Gabriel names it ("Gabriel", "Gabriel & Arina" / "G&A" / "us" / "shared", or "both"); otherwise the skill asks. It then uses only that side's mailbox and task app (table §2) | the skill text |
+| Connector | `side` is a **required** argument on all 10 tools | `mcp.ts` (zod) — missing / unknown → error |
+| Page | URL `?type=`: none or `gabriel-arina` → G&A; `gabriel` → Gabriel; anything else → error, nothing loaded. Survives sign-in (`/api/auth/login?type=gabriel | rules | rules-gabriel`) | the page + `auth.ts` (`pageType`, `landingFor`) |
+| HTTP API | `?side=` required on `/api/session`, `/api/summary`, `/api/context` → `400` without it | `parseSide` in `contract.ts` |
+| Storage | the side is part of every key: `session-<side>`, `draft-<side>`, `summary-<side>`, `context-<side>`, `context-history/<side>/…` | `store.ts` (`DocKey` type) |
+| Session content | top-level `side`; `groups` has exactly that one key; every email's `source` and every task's `provider` must belong to it (`outlook` / `todo` → `gabriel`, `gmail` / `gtasks` → `gabriel-arina`) | `checkSession` / `groupOf` in `contract.ts`; `appendEmails` / `appendTasks` refuse the other side's items |
+| Rules | each side has its own context document; `context_get` renders it with a line naming the side | `context.ts` (`renderContextMarkdown(ctx, side)`) |
+
+So the two sides cannot meet: different keys, different statuses, and the server refuses an item of the wrong side at every write.
+
+### 1.4 One run, end to end (side `gabriel-arina`)
+
+1. Gabriel: "email triage Gabriel & Arina".
+2. Step 1 calls `context_get { side }` → reads `context-gabriel-arina`.
+3. Step 1 reads Google Tasks (`gabrielandarina-google-tasks`) and the shared Gmail (Gmail connector) — read only.
+4. Step 1 calls `session_status` → `session_begin` (creates `draft-gabriel-arina`) → `session_add_emails` / `session_add_tasks` in batches of ≤ 25 → `session_publish { side, summary }`. The server validates, writes `session-gabriel-arina` (status `pending-review`) and `summary-gabriel-arina`, and deletes the draft.
+5. Gabriel opens `https://pa-email-triage.netlify.app`, signs in with Google. The page calls `GET /api/session?side=gabriel-arina`, `/api/summary?…`, `/api/context?…`.
+6. Gabriel decides, then **Confirm & Save** → `PUT /api/session?side=gabriel-arina` → status `reviewed`.
+7. Gabriel: "save my triage Gabriel & Arina". Step 3 calls `session_status` → `session_get_work` (pages) → writes to Google Tasks and Gmail → `session_record_outcomes` → `session_finish_group` → status `processed`.
+8. Gabriel reloads the page → read-only outcomes.
+
+Side `gabriel` is the same with `outlook-mcp` for both mail and To Do, and the page at `?type=gabriel`.
+
 ## 2. Two sides, never mixed
 
 | Side | Mailbox (`source`) | Task app (`provider`) | Review page | Rules page |
@@ -70,6 +145,18 @@ stateDiagram-v2
 ## 4. Step 1 — `pa-email-triage` (prepare)
 
 Read-and-suggest only: creates, updates or completes no task; flags, stars, archives, moves, deletes or replies to nothing; adds, removes or creates no Gmail label. Never launches the page. If the `triage-session` connector is unavailable → stop and say so; never a local session file. If the side's task app or mailbox can't be fetched → stop that side before `session_begin` (otherwise every tracked thread looks new and produces duplicates).
+
+**Calls and data at a glance**
+
+| | `gabriel` | `gabriel-arina` |
+|---|---|---|
+| Rules read from | `context_get { side: "gabriel" }` → Blobs `context-gabriel` | `context_get { side: "gabriel-arina" }` → `context-gabriel-arina` |
+| Tasks read from | `outlook-mcp`: `list_task_lists`, `list_tasks`, `get_task` (Microsoft To Do, default list) | `gabrielandarina-google-tasks`: `list_task_lists`, `list_tasks` (Google Tasks, default list) |
+| Mail read from | `outlook-mcp`: `list_emails`, `search_emails`, `read_email` | Gmail connector: `list_labels`, `search_threads`, `get_thread`, `get_message` |
+| Session written to | connector `session_begin` / `session_add_emails` / `session_add_tasks` → Blobs `draft-gabriel`; `session_publish` → `session-gabriel` | same → `draft-gabriel-arina` → `session-gabriel-arina` |
+| Run summary written to | `session_publish { side, summary }` → Blobs `summary-gabriel` | → `summary-gabriel-arina` |
+| Writes to mailbox / task app | none | none |
+| Output in chat | counts + the page link `…/triage-review.html?type=gabriel` | counts + `https://pa-email-triage.netlify.app` |
 
 ### 4.1 Read the side's triage context
 
@@ -173,7 +260,13 @@ Sections 3 and 4 never overlap; every count equals the items printed. Shown on t
 
 ## 5. Step 2 — the review page
 
+**Where:** `public/triage-review.html`, served by Netlify. Side from `?type=` (§1.3).
+
 **Load:** sign-in check → `GET /api/session?side=` → `GET /api/summary?side=` → `GET /api/context?side=`. No mailbox or task-app calls. Nothing is written until Confirm & Save or Skip.
+
+| Reads | Writes |
+|---|---|
+| `session-<side>`, `summary-<side>`, `context-<side>` (all through `/api/*`) | `session-<side>` — only `decision` blocks, `newTasks`, its status (`PUT /api/session`); `context-<side>` — only through the sender panel (`PUT /api/context`) |
 
 **Screens**
 - **Landing** — Sign in with Google; "No <side> session yet — run pa-email-triage for <side>."; unknown `?type=` error; "This Google account is not allowed."
@@ -236,6 +329,16 @@ The page never writes `processedAt` or outcomes.
 **Rule in one line:** every email ends up kept in the inbox or archived, and its star/flag is set to `decision.flagged`; every task is created, edited or completed (cancel = completed plus a note line). Titles are written once, at creation. Nothing is deleted, nothing is un-archived. `gabriel` only ever touches Outlook + To Do; `gabriel-arina` only Gmail + Google Tasks.
 
 Decisions come only from the session. Asked mid-run to "also archive X" → the decision must be changed in the session first; the skill never freelances.
+
+**Calls and data at a glance**
+
+| | `gabriel` | `gabriel-arina` |
+|---|---|---|
+| Session read from | connector `session_status`, `session_get_work` → Blobs `session-gabriel` | → `session-gabriel-arina` |
+| Tasks written to | `outlook-mcp`: `list_tasks`, `get_task`, `create_task`, `update_task` (Microsoft To Do, default list) | `gabrielandarina-google-tasks`: `list_tasks`, `get_task`, `create_task`, `update_task`, `complete_task` (default list `@default`) |
+| Mail written to | `outlook-mcp`: `move_email` (→ Archive), `flag_email` | Gmail connector: `unlabel_message` (`INBOX`, `STARRED`, user labels), `label_message`, `list_labels`, `create_label` |
+| Outcomes written to | connector `session_record_outcomes`, `session_finish_group` → `session-gabriel` | → `session-gabriel-arina` |
+| Not read | the run summary, the rules, the other side | same |
 
 ### 6.1 Gate and load
 
@@ -307,7 +410,9 @@ Every write that must not lose an update is conditional on the etag read (`onlyI
 
 ## 8. Triage rules (`rules.html`, `/api/context`)
 
-One context per side: **properties**, tracked **senders**, Gmail **label** registry + label guide, **topics**, **ignore** list, ordered on/off **rules**, run **settings**. Strict schema (`netlify/lib/context.ts`): unique ids and label names, sender / property labels must be non-manual registry labels, a sender's property must exist, one address → one sender. A new side starts from `emptyContext()` (every section, no entries).
+**Where the rules live:** Netlify Blobs, store `triage`, key `context-gabriel` / `context-gabriel-arina` — one JSON document per side (how to look at it: §1.2). Edited only on `rules.html` (`?type=gabriel` for Gabriel) and the review page's sender panel, both through `/api/context?side=`. Read by step 1 only through `context_get { side }`, which renders the document as markdown. Step 3 never reads it. `PA/Email Triage/task-context.md` is a pointer only; its last real version is in the PA workspace's git history.
+
+One context per side: **properties**, tracked **senders**, Gmail **label** registry + label guide, **topics**, **ignore** list, ordered on/off **rules**, run **settings**. The Gabriel side has no Gmail labels (Outlook has none). Strict schema (`netlify/lib/context.ts`): unique ids and label names, sender / property labels must be non-manual registry labels, a sender's property must exist, one address → one sender. A new side starts from `emptyContext()` (every section, no entries).
 
 - `rules.html` tabs: Senders · Properties · Gmail labels · Topics · Ignore list · Rules · Run settings · History (view / restore). Deep links like `rules.html#senders`.
 - **Every change saves at once:** re-read, apply to the fresh copy, `PUT` the whole document; a `412` redoes the same change (3 attempts). Same in the review page's sender panel.
