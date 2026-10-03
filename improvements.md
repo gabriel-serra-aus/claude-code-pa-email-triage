@@ -2,6 +2,12 @@
 
 ## Change log
 
+### 3 Oct 2026 — Split by side: Gabriel / Gabriel & Arina never mixed
+- Each side has its own session, context and run summary (`session-<side>`, `context-<side>`, `summary-<side>`); every connector tool takes a required `side`; `session_publish` takes the run summary; new `summary_get` and `/api/summary`.
+- One side per page: no parameter (or `?type=gabriel-arina`) = Gabriel & Arina, `?type=gabriel` = Gabriel, anything else an error. `?type=gna` and the two-tab view are gone. Same on `rules.html`.
+- Review page: collapsible **Run summary** panel; no more adopting the other tab from disk.
+- The sides are independent — preparing, reviewing or saving one never waits for the other.
+
 ### 3 Oct 2026 — Triage Rules page, sender rule panel, context store
 
 - **The triage context moved into the app.** What `PA/Email Triage/task-context.md` held

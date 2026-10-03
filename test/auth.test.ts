@@ -70,12 +70,13 @@ describe("request helpers", () => {
     assert.equal(sameOrigin(new Request(url)), false);
   });
 
-  it("pageType only passes gabriel, gna and rules", () => {
-    assert.deepEqual(["gabriel", "gna", "rules", "GNA", "//evil.example", "", null].map(pageType), ["gabriel", "gna", "rules", null, null, null, null]);
+  it("pageType only passes gabriel, rules and rules-gabriel", () => {
+    assert.deepEqual(["gabriel", "rules", "rules-gabriel", "gna", "gabriel-arina", "//evil.example", "", null].map(pageType),
+      ["gabriel", "rules", "rules-gabriel", null, null, null, null, null]);
   });
 
-  it("landingFor sends rules to the Rules page and the rest to the review page", () => {
-    assert.deepEqual(["rules", "gna", "gabriel", null].map((t) => landingFor(pageType(t))),
-      ["/rules.html", "/triage-review.html?type=gna", "/triage-review.html?type=gabriel", "/triage-review.html"]);
+  it("landingFor keeps the side and the page; Gabriel & Arina is the default", () => {
+    assert.deepEqual(["rules", "rules-gabriel", "gabriel", null].map((t) => landingFor(pageType(t))),
+      ["/rules.html", "/rules.html?type=gabriel", "/triage-review.html?type=gabriel", "/triage-review.html"]);
   });
 });

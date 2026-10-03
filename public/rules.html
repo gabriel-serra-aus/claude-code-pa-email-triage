@@ -107,11 +107,11 @@
 
 <header>
   <div>
-    <h1>Triage Rules <span class="version" id="app-version">v2026.10.03 - 14-00</span></h1>
+    <h1>Triage Rules<span id="side-name"></span> <span class="version" id="app-version">v2026.10.03 - 15-30</span></h1>
     <div class="meta" id="header-meta">Not loaded</div>
   </div>
   <div class="header-actions">
-    <a class="btn" href="/triage-review.html">← Review</a>
+    <a class="btn" id="link-review" href="/triage-review.html">← Review</a>
     <button class="btn" id="btn-theme" title="Toggle light / dark mode">🌙 Dark</button>
     <button class="btn hidden" id="btn-reload">Reload</button>
     <button class="btn hidden" id="btn-signout">Sign out</button>
@@ -158,9 +158,11 @@
 "use strict";
 
 /* ══════════════════════════════════════════════════════════════════════
-   Triage Rules — the editor for the triage context (what task-context.md
-   used to be). Reads GET /api/context and saves each change at once with
-   PUT /api/context + X-Context-ETag, the whole document every time. A save
+   Triage Rules — the editor for ONE SIDE's triage context (what
+   task-context.md used to be). No parameter (or ?type=gabriel-arina) = Gabriel &
+   Arina, ?type=gabriel = Gabriel; anything else is an error, never a fallback.
+   Reads GET /api/context?side= and saves each change at once with
+   PUT /api/context?side= + X-Context-ETag, the whole document every time. A save
    that loses a race (412) re-reads and re-applies the same change, so two
    open pages never overwrite each other. Every replaced version is kept on
    the server (History tab). pa-email-triage reads it via `context_get` on
@@ -201,21 +203,27 @@ function initTheme() {
   applyTheme(theme || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
 }
 
-// ── Store: /api/context ───────────────────────────────────────────────
+// ── The side: each has its own rules ──────────────────────────────────
+const SIDE_LABELS = { gabriel: "Gabriel", "gabriel-arina": "Gabriel & Arina" };
+const URL_TYPE = new URLSearchParams(location.search).get("type");
+const SIDE = URL_TYPE === null || URL_TYPE === "" || URL_TYPE === "gabriel-arina" ? "gabriel-arina"
+           : URL_TYPE === "gabriel" ? "gabriel" : null;
+
+// ── Store: /api/context?side= ─────────────────────────────────────────
 class AuthRequired extends Error {}
 class NoContext extends Error {}
 class Conflict extends Error {}
 function etagOf(res) { return res.headers.get("X-Context-ETag") || res.headers.get("ETag"); }
 
 async function readContext() {
-  const res = await fetch("/api/context", { cache: "no-store" });
+  const res = await fetch(`/api/context?side=${SIDE}`, { cache: "no-store" });
   if (res.status === 401) throw new AuthRequired("Sign in required");
   if (res.status === 404) throw new NoContext("No context yet");
   if (!res.ok) throw new Error(`Could not load the rules (${res.status})`);
   return { doc: await res.json(), etag: etagOf(res) };
 }
 async function writeContext(doc, etag) {
-  const res = await fetch("/api/context", {
+  const res = await fetch(`/api/context?side=${SIDE}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json", "If-Match": etag, "X-Context-ETag": etag },
     body: JSON.stringify(doc),
@@ -380,7 +388,7 @@ async function load() {
   } catch (err) {
     ctx = null;
     if (err instanceof AuthRequired) { signedIn = false; $("landing-note").textContent = ""; }
-    else if (err instanceof NoContext) { signedIn = true; $("landing-note").textContent = "No rules loaded yet — the one-off import has not run."; }
+    else if (err instanceof NoContext) { signedIn = true; $("landing-note").textContent = `No ${SIDE_LABELS[SIDE]} rules yet — the one-off import has not run.`; }
     else { signedIn = true; showToast(err.message); }
   }
   render();
@@ -588,7 +596,7 @@ async function renderHistory() {
   $("section-intro").textContent = "Every save keeps the version it replaced (the last 50). Restoring one saves it as the newest version — nothing is lost.";
   $("toolbar").innerHTML = "";
   $("list").innerHTML = `<div class="empty">Loading…</div>`;
-  const res = await fetch("/api/context?history", { cache: "no-store" });
+  const res = await fetch(`/api/context?side=${SIDE}&history`, { cache: "no-store" });
   if (!res.ok) { $("list").innerHTML = `<div class="empty">Could not load the history (${res.status}).</div>`; return; }
   const { versions } = await res.json();
   if (ui.tab !== "history") return;
@@ -604,7 +612,7 @@ async function renderHistory() {
   $("list").querySelectorAll("[data-restore]").forEach((b) => b.addEventListener("click", () => restoreVersion(b.dataset.restore)));
 }
 async function fetchVersion(key) {
-  const res = await fetch(`/api/context?version=${encodeURIComponent(key)}`, { cache: "no-store" });
+  const res = await fetch(`/api/context?side=${SIDE}&version=${encodeURIComponent(key)}`, { cache: "no-store" });
   if (!res.ok) throw new Error(`Could not load that version (${res.status})`);
   return res.json();
 }
@@ -634,6 +642,17 @@ document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && modal)
 
 (function boot() {
   initTheme();
+  if (!SIDE) {
+    $("screen-landing").classList.remove("hidden");
+    $("btn-open").classList.add("hidden");
+    $("landing-note").textContent = `Unknown ?type=${URL_TYPE} — open this page with no parameter for Gabriel & Arina, or ?type=gabriel for Gabriel.`;
+    return;
+  }
+  // Sign-in and the way back keep the side (Gabriel & Arina is the default).
+  $("side-name").textContent = ` — ${SIDE_LABELS[SIDE]}`;
+  document.title = `Triage Rules — ${SIDE_LABELS[SIDE]}`;
+  $("btn-open").href = `/api/auth/login?type=${SIDE === "gabriel" ? "rules-gabriel" : "rules"}`;
+  $("link-review").href = "/triage-review.html" + (SIDE === "gabriel" ? "?type=gabriel" : "");
   // Deep link from the review page: rules.html#senders, #rules …
   const hash = location.hash.slice(1);
   if (TAB_ORDER.includes(hash)) ui.tab = hash;

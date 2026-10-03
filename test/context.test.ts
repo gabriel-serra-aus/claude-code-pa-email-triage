@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  HISTORY_KEEP, checkContext, findSender, historyToPrune, prepareContextWrite, renderContextMarkdown, type TriageContext,
+  HISTORY_KEEP, checkContext, emptyContext, findSender, historyPrefix, historyToPrune, prepareContextWrite, renderContextMarkdown, type TriageContext,
 } from "../netlify/lib/context.ts";
 
 /** SYNTHETIC — the real context holds personal data and never goes in this (public) repo. */
@@ -66,6 +66,20 @@ describe("checkContext", () => {
   });
 });
 
+describe("emptyContext", () => {
+  it("is valid, with every section and no entries", () => {
+    const ctx = emptyContext();
+    assert.deepEqual(checkContext(ctx), []);
+    assert.deepEqual([ctx.properties, ctx.senders, ctx.labels, ctx.topics, ctx.ignore, ctx.rules, ctx.settings].map((l) => l.length), [0, 0, 0, 0, 0, 0, 0]);
+  });
+
+  it("renders every heading for either side", () => {
+    const md = renderContextMarkdown(emptyContext(), "gabriel");
+    for (const heading of ["## 1. Properties", "## 2. People & senders", "## 3. Gmail labels", "## 6. Rules", "## 7. Run settings"]) assert.ok(md.includes(heading), heading);
+    assert.match(md, /Updated never\./);
+  });
+});
+
 describe("prepareContextWrite", () => {
   it("stamps who and when, whatever the body said", () => {
     const now = new Date("2026-10-03T01:02:03.000Z");
@@ -93,15 +107,20 @@ describe("findSender", () => {
 
 describe("historyToPrune", () => {
   it("keeps the newest HISTORY_KEEP keys and returns the rest, oldest first", () => {
-    const keys = Array.from({ length: HISTORY_KEEP + 2 }, (_, i) => `context-history/2026-10-${String(i + 1).padStart(2, "0")}T00:00:00.000Z`);
+    const keys = Array.from({ length: HISTORY_KEEP + 2 }, (_, i) => `${historyPrefix("gabriel")}2026-10-${String(i + 1).padStart(2, "0")}T00:00:00.000Z`);
     assert.deepEqual(historyToPrune([...keys].reverse()), keys.slice(0, 2));
     assert.deepEqual(historyToPrune(keys.slice(0, 3)), []);
+  });
+
+  it("each side has its own prefix", () => {
+    assert.equal(historyPrefix("gabriel"), "context-history/gabriel/");
+    assert.equal(historyPrefix("gabriel-arina"), "context-history/gabriel-arina/");
   });
 });
 
 describe("renderContextMarkdown", () => {
   it("renders every section, skips disabled rules and escapes table pipes", () => {
-    const md = renderContextMarkdown(sample());
+    const md = renderContextMarkdown(sample(), "gabriel-arina");
     for (const heading of ["## 1. Properties", "## 2. People & senders", "### 3.1 Label registry", "### 3.2 How the label is chosen", "## 4. Tracked topics", "## 5. Ignore list", "## 6. Rules", "## 7. Run settings"]) {
       assert.ok(md.includes(heading), heading);
     }
@@ -111,5 +130,12 @@ describe("renderContextMarkdown", () => {
     assert.ok(!md.includes("| `PAID` |"), "manual-only labels stay out of the registry table");
     assert.match(md, /- One task per thread\./);
     assert.ok(!md.includes("Switched off"));
+  });
+
+  it("names the side it belongs to", () => {
+    assert.match(renderContextMarkdown(sample(), "gabriel-arina"), /Side: \*\*Gabriel & Arina\*\* — the shared Gmail/);
+    const gabriel = renderContextMarkdown(sample(), "gabriel");
+    assert.match(gabriel, /Side: \*\*Gabriel\*\* — the Outlook mailbox and Microsoft To Do/);
+    assert.match(gabriel, /Not used on this side — Outlook has no labels\./);
   });
 });

@@ -6,9 +6,11 @@
 
 | URL | Shows |
 |---|---|
-| `triage-review.html` | both tabs — Gabriel and Gabriel & Arina |
-| `triage-review.html?type=gabriel` | Gabriel only |
-| `triage-review.html?type=gna` | Gabriel & Arina only |
+| `triage-review.html` (or `?type=gabriel-arina`) | Gabriel & Arina |
+| `triage-review.html?type=gabriel` | Gabriel |
+| `rules.html` / `rules.html?type=gabriel` | that side's triage rules |
+
+One side per page, never both. Any other `?type=` is an error, not a fallback.
 
 Works in any browser, phones and iPads included. **Sign in with Google** — only the one address in `ALLOWED_EMAILS` gets in; the sign-in lasts 30 days per browser.
 
@@ -16,40 +18,39 @@ Works in any browser, phones and iPads included. **Sign in with Google** — onl
 
 ## 1. The loop and the two skills
 
-Everything is exchanged through **one session** in Netlify Blobs (store `triage`, key `session`; the triage rules sit beside it under `context`, §6). The page reaches it through `/api/session`; the two skills through the `triage-session` MCP connector (`/mcp/<secret>`). Nothing else touches the store.
+There are **two sides**, each with its own three records in Netlify Blobs (store `triage`): `session-<side>` (the session; `draft-<side>` while step 1 builds it), `context-<side>` (the triage rules, §6) and `summary-<side>` (step 1's run summary). `gabriel` = Outlook + Microsoft To Do, `gabriel-arina` = the shared Gmail + Google Tasks. The pages reach them through `/api/session`, `/api/context`, `/api/summary` (each with `?side=`); the two skills through the `triage-session` MCP connector (`/mcp/<secret>`), where every tool takes a required `side`. Nothing else touches the store, and the sides never wait for each other. The loop below runs once per side.
 
 ```mermaid
 flowchart LR
-    OL[(Outlook inbox)] --> T
-    GM[(Gabriel & Arina Gmail)] --> T
-    TK[(Google Tasks + To Do<br/>open tasks)] --> T
-    T["1 · pa-email-triage<br/>(Cowork skill)<br/>classify + suggest tasks"]
-    T -- "session_begin / add_emails /<br/>add_tasks / publish" --> F[("Netlify Blobs<br/>session")]
-    F -- "GET /api/session" --> P["2 · triage-review.html<br/>(Gabriel, any browser)<br/>category → action, edit tasks,<br/>Confirm & Save or Skip per tab"]
-    P -- "PUT /api/session + If-Match<br/>decisions + newTasks<br/>groups.&lt;tab&gt;.status: reviewed | skipped" --> F
-    F -- "session_get_work<br/>(no group pending-review;<br/>each group = reviewed)" --> S["3 · pa-email-triage-save<br/>(Cowork skill)<br/>apply decisions per group"]
-    S --> TK2[(Google Tasks / To Do:<br/>create / update /<br/>complete / cancel)]
-    S --> MB[(Outlook + Gmail:<br/>keep / archive, star, labels)]
+    MB0[(the side's mailbox<br/>Outlook or shared Gmail)] --> T
+    TK[(the side's task app<br/>To Do or Google Tasks)] --> T
+    T["1 · pa-email-triage &lt;side&gt;<br/>(Cowork skill)<br/>classify + suggest tasks"]
+    T -- "session_begin / add_emails /<br/>add_tasks / publish + summary" --> F[("Netlify Blobs<br/>session-&lt;side&gt;<br/>summary-&lt;side&gt;")]
+    F -- "GET /api/session?side=<br/>GET /api/summary?side=" --> P["2 · triage-review.html<br/>(Gabriel, any browser)<br/>category → action, edit tasks,<br/>Confirm & Save or Skip"]
+    P -- "PUT /api/session?side= + X-Session-ETag<br/>decisions + newTasks<br/>groups[side].status: reviewed | skipped" --> F
+    F -- "session_get_work<br/>(side reviewed)" --> S["3 · pa-email-triage-save &lt;side&gt;<br/>(Cowork skill)<br/>apply decisions"]
+    S --> TK2[(the side's task app:<br/>create / update /<br/>complete / cancel)]
+    S --> MB[(the side's mailbox:<br/>keep / archive, star, labels)]
     S -- "session_record_outcomes<br/>session_finish_group" --> F
     F -. "read-only outcome summary" .-> P
 ```
 
-| Step | Who | Reads | Writes | `groups.<tab>.status` after |
+| Step | Who | Reads | Writes | `groups[side].status` after |
 |---|---|---|---|---|
-| 1. Triage | **pa-email-triage** (Cowork skill) | Outlook inbox, Gabriel & Arina Gmail inbox, open Google Tasks / To Do tasks | a **draft** (`session_begin`, `session_add_emails`, `session_add_tasks`), then `session_publish` makes it the live session | `pending-review` |
-| 2. Review | **this page** (Gabriel) | `GET /api/session` | `PUT /api/session`: `decision` blocks, `newTasks`, `groups.<tab>` | `reviewed` (Confirm & Save) or `skipped` (Skip) for **that tab only** — the other tab stays `pending-review` until it gets its own Confirm or Skip |
-| 3. Save | **pa-email-triage-save** (Cowork skill) | `session_status` gate: **only once neither group is `pending-review`**; then `session_get_work` for every group whose status is `reviewed` | task apps (create/update/complete/cancel), Outlook/Gmail (keep or archive, star, labels); `session_record_outcomes` + `session_finish_group` | `processed` or `processed-with-errors` for that group; `skipped` groups stay `skipped` |
+| 1. Triage | **pa-email-triage** (Cowork skill), per side | the side's context (`context_get`), inbox and open tasks | a **draft** (`session_begin`, `session_add_emails`, `session_add_tasks`), then `session_publish` makes it the live session and stores the run summary | `pending-review` |
+| 2. Review | **this page** (Gabriel) | `GET /api/session?side=`, `GET /api/summary?side=` | `PUT /api/session?side=`: `decision` blocks, `newTasks`, `groups[side]` | `reviewed` (Confirm & Save) or `skipped` (Skip) |
+| 3. Save | **pa-email-triage-save** (Cowork skill), per side | `session_status` gate: the side must not be `pending-review`; then `session_get_work` when it is `reviewed` | the side's task app (create/update/complete/cancel) and mailbox (keep or archive, star, labels); `session_record_outcomes` + `session_finish_group` | `processed` or `processed-with-errors`; `skipped` stays `skipped` |
 
-**Input** of the page = the session as published by pa-email-triage. **Output** = the same session with `decision` blocks, `newTasks` and `groups.<gabriel|gabriel-arina>.status: "reviewed"` or `"skipped"` — which is the entire input of pa-email-triage-save. **Each group has its own status and is decided independently**: Gabriel can be confirmed while Gabriel & Arina is skipped, and vice-versa — but the save skill only runs once **both** have been decided (no group left `pending-review`). **There is no session-level status** — `groups.gabriel.status` and `groups["gabriel-arina"].status` are the only two, and `groups` never has a third key. The page reads and writes the session only through `/api/session` (its one other call is `/api/context`, §6); the whole JSON is loaded, mutated in place and written back, so every field it does not know about is preserved — and the server enforces who may change what (§4).
+**Input** of the page = the side's session as published by pa-email-triage. **Output** = the same session with `decision` blocks, `newTasks` and `groups[side].status: "reviewed"` or `"skipped"` — which is the entire input of pa-email-triage-save for that side. **The sides are independent**: Gabriel can be reviewed and saved while Gabriel & Arina has not even been prepared. **There is no session-level status** — `groups[side].status` is the only one, and `groups` has only the side's key. The page reads and writes the session only through `/api/session?side=` (its other calls are `/api/summary` and `/api/context`, §6); the whole JSON is loaded, mutated in place and written back, so every field it does not know about is preserved — and the server enforces who may change what (§4).
 
-Two mailboxes → two review queues (tabs):
+The two sides:
 
-| Mailbox | `email.source` | Tab | Task backend (`provider`) |
+| Mailbox | `email.source` | Side / page | Task backend (`provider`) |
 |---|---|---|---|
 | Gabriel's Outlook | `outlook` | **Gabriel** | Microsoft To Do (`todo`) |
 | Gabriel & Arina Gmail | `gmail` | **Gabriel & Arina** | Google Tasks (`gtasks`) |
 
-One backend per mailbox, no cross-posting, no list picking. Existing and manually added tasks land on a tab by their `provider`. A task's identity is its `key` (`"<provider>:<listId>:<taskId>"`); an email points at one with `existingTaskKey`. There are no groups and no task tags.
+One backend per mailbox, no cross-posting, no list picking. A session only ever holds its side's emails and tasks — the server refuses the other side's. A task's identity is its `key` (`"<provider>:<listId>:<taskId>"`); an email points at one with `existingTaskKey`. There are no groups and no task tags.
 
 The triage **rules** (who matters, what to track and ignore, which Gmail labels exist) live in the same site — see §6.
 
@@ -57,10 +58,11 @@ The triage **rules** (who matters, what to track and ignore, which Gmail labels 
 
 ## 2. Screens
 
-- **Landing** — **Sign in with Google** (full-page redirect, `?type=` survives it). A signed-in browser goes straight to the session; no session yet → "No session yet — run pa-email-triage."; a Google account that is not allowed → "This Google account is not allowed." The header has **Reload** (re-fetch; in-memory edits on pending tabs are lost) and **Sign out** (this browser only).
-- **Review** (`pending-review`) — per tab:
+- **Landing** — **Sign in with Google** (full-page redirect, the side survives it). A signed-in browser goes straight to the side's session; no session yet → "No <side> session yet — run pa-email-triage for <side>."; an unknown `?type=` → an error naming the two valid links, nothing loaded; a Google account that is not allowed → "This Google account is not allowed." The header has **Reload** (re-fetch; in-memory edits on pending tabs are lost) and **Sign out** (this browser only).
+- **Run summary** — a collapsible panel under the tab with the summary pa-email-triage stored with this session (`/api/summary?side=`); hidden when there is none.
+- **Review** (`pending-review`):
   1. **Emails** — from, subject, date/age, Claude's summary, 🚩 if `isFlagged`, source badge, deep link (`suggestedTask.link`, else built from `id`: `outlook.live.com/mail/0/inbox/id/…` or `mail.google.com/mail/u/0/#inbox/…`). Filter by category. Each row has a **Category** ribbon and an **Action** ribbon (§3). Emails already matched to a task show **✓ Tracked** instead of a category. Each head's from-line carries a **sender chip** (§6).
-  2. **Open tasks** for this tab (Google Tasks or To Do) — Open / Done / Cancelled select + **Edit** (task editor with live diff against the task as fetched).
+  2. **Open tasks** of the side (To Do or Google Tasks) — Open / Done / Cancelled select + **Edit** (task editor with live diff against the task as fetched).
   3. **New tasks** — **+ Add task**; editable/deletable until confirmed.
   4. **Sticky bar** — counts for the tab (tasks to create / to flag / to archive / task updates, done, cancelled, edited, new), **Skip — <tab>** and **Confirm & Save — <tab>**.
 - **Reviewed** (`reviewed`) — read-only "waiting for pa-email-triage-save".
@@ -119,18 +121,18 @@ Two plain-text sections:
 
 ---
 
-## 4. Confirm & Save / Skip — per tab
+## 4. Confirm & Save / Skip
 
 **The session is written only here.** Editing decisions on the page changes nothing in the store until you press one of the two buttons in the sticky bar. Both go through `writeGroupStatus()`:
 
 1. `materializeDecisions()` — syncs derived fields, builds fallback tasks for Important emails without one, makes every child decision explicit.
-2. **Stale-tab guard** — re-reads the session (`GET`, keeping its `ETag`) and refuses to write if *this group* is no longer `pending-review` (a forgotten old tab cannot clobber a reviewed/skipped/processed group): toast `Not saved — <tab> is already "<status>". Reload to see it.` The other group's `groups.<tab>` entry is taken from the stored copy, and if it has moved on (decided elsewhere or already processed) its emails / tasks / newTasks are adopted too, so nothing that was already decided is overwritten.
-3. Sets `groups.<gabriel|gabriel-arina> = { status: "reviewed" | "skipped", reviewedAt: <ISO>, processedAt: null }` for **this tab only** (`reviewedAt` = when Gabriel decided, for both buttons); the tab becomes read-only. The other tab stays `pending-review` and fully editable. A **skipped** tab keeps its drafted decisions in the session (the save skill ignores them) and offers **Reopen for review**, which writes it back to `pending-review` (guard: still `skipped`) with `reviewedAt: null`.
+2. **Stale-tab guard** — re-reads the session (`GET`, keeping its `ETag`) and refuses to write if the side is no longer `pending-review` (a forgotten old tab cannot clobber a reviewed/skipped/processed session): toast `Not saved — <side> is already "<status>". Reload to see it.`
+3. Sets `groups[side] = { status: "reviewed" | "skipped", reviewedAt: <ISO>, processedAt: null }` (`reviewedAt` = when Gabriel decided, for both buttons); the page becomes read-only. A **skipped** side keeps its drafted decisions in the session (the save skill ignores them) and offers **Reopen for review**, which writes it back to `pending-review` (guard: still `skipped`) with `reviewedAt: null`.
 4. `PUT /api/session` with `If-Match: <etag>`. The server checks the sign-in, the `Origin`, the contract and **ownership** (the page may only change `decision` blocks, `newTasks` and its own status moves — never `outcome` or `processedAt`), then writes with the same etag condition. `412` (the session changed in any way since the re-read) → "Not saved — session changed. Reload."; `401` (sign-in expired) → "Signed out — sign in and press again" and a header **Sign in** link that opens a new tab, so in-memory edits survive. On any failure the group status is rolled back so the UI stays editable.
 
-`pa-email-triage-save` refuses to run while either group is still `pending-review`, so every session ends with each tab either confirmed or skipped.
+`pa-email-triage-save` refuses to touch a side that is still `pending-review`, so every session ends confirmed or skipped. The other side plays no part.
 
-A tab whose group is `processed` / `processed-with-errors` shows that group's read-only outcome summary instead of the review UI.
+A side that is `processed` / `processed-with-errors` shows its read-only outcome summary instead of the review UI.
 
 The page never writes `processedAt` or per-item outcome fields — those belong to the save skill.
 
@@ -138,15 +140,15 @@ The page never writes `processedAt` or per-item outcome fields — those belong 
 
 ## 5. Session contract
 
-**The JSON is defined in exactly one place: [`triage-session.schema.jsonc`](triage-session.schema.jsonc)** (this repo). It is an annotated example of the whole session — every key, which step writes it, the action vocabulary, the group lifecycle, the Gmail-labels rule and the per-step checklists. `netlify/lib/contract.ts` is its zod mirror and is what the server enforces; if they disagree, the schema file wins and the zod gets fixed. When the page changes what it reads or writes, change the schema file, then the code. All three steps (pa-email-triage, this page, pa-email-triage-save) follow it — the skills through the connector tools (`session_status`, `session_begin`, `session_add_emails`, `session_add_tasks`, `session_publish`, `session_get_work`, `session_record_outcomes`, `session_finish_group`), never the whole JSON.
+**The JSON is defined in exactly one place: [`triage-session.schema.jsonc`](triage-session.schema.jsonc)** (this repo). It is an annotated example of the whole session — every key, which step writes it, the action vocabulary, the group lifecycle, the Gmail-labels rule and the per-step checklists. `netlify/lib/contract.ts` is its zod mirror and is what the server enforces; if they disagree, the schema file wins and the zod gets fixed. When the page changes what it reads or writes, change the schema file, then the code. All three steps (pa-email-triage, this page, pa-email-triage-save) follow it — the skills through the connector tools (`session_status`, `session_begin`, `session_add_emails`, `session_add_tasks`, `session_publish`, `session_get_work`, `session_record_outcomes`, `session_finish_group`, `context_get`, `summary_get` — every one with `side`), never the whole JSON.
 
-Top-level keys, for orientation only: `generatedAt`, `mailboxes`, `gmailLabels`, `groups.{gabriel,"gabriel-arina"}` (the only two statuses in the session), `emails[]`, `existingTasks[]`, `newTasks[]`.
+Top-level keys, for orientation only: `side`, `generatedAt`, `mailboxes`, `gmailLabels`, `groups.<side>` (the only status in the session), `emails[]`, `existingTasks[]`, `newTasks[]`.
 
 **Loading rules** (`applyLoadDefaults`): only what pa-email-triage may omit is filled in — missing `decision` / `existingTasks` / `newTasks` are created and an action that is missing or not allowed for that email is derived (from the matched task's Done/Cancelled if tracked, else the category default). The page only ever sees a session that `session_publish` accepted, so there is no legacy handling and no migration.
 
 ### What pa-email-triage must produce
 
-`generatedAt`, `groups.gabriel` / `groups["gabriel-arina"]` both `pending-review`, `gmailLabels`, `emails[]` with `id`, `source`, `threadId`, `threadRole`, `inInbox`, `summary` (Gmail: `labels`), and on each head a `category` plus either `existingTaskKey` (the `key` of an entry in `existingTasks[]`) or an optional `suggestedTask`. `existingTasks[]` carry the current Google Tasks / To Do values. `decision` blocks may be omitted — the page fills them. It reads its rules with `context_get` (§6).
+Per side: `side`, `generatedAt`, `groups[side]` `pending-review`, `gmailLabels` (`[]` for gabriel), `emails[]` (only that side's) with `id`, `source`, `threadId`, `threadRole`, `inInbox`, `summary` (Gmail: `labels`), and on each head a `category` plus either `existingTaskKey` (the `key` of an entry in `existingTasks[]`) or an optional `suggestedTask`. `existingTasks[]` carry the current Google Tasks / To Do values. `decision` blocks may be omitted — the page fills them. It reads its rules with `context_get` (§6).
 
 ### Gmail labels are email-only
 
@@ -154,26 +156,26 @@ Gmail user labels belong to the email, not the task: `labels` (now) and `decisio
 
 ### What pa-email-triage-save must honour
 
-- **Gate first:** if `groups.gabriel.status` or `groups["gabriel-arina"].status` is `pending-review`, stop and touch nothing — Gabriel must Confirm or Skip every tab before anything is applied.
-- Then act **per group**: for each `groups.<tab>` whose `status === "reviewed"`, apply that group's items only — `gabriel` = emails with `source !== "gmail"` + tasks with `provider: "todo"`; `gabriel-arina` = Gmail emails + tasks with `provider: "gtasks"`. Never touch a group that is `skipped` (its `decision` blocks are drafts Gabriel chose not to apply — leave the status `skipped`) or already `processed`.
-- After processing, `session_finish_group` sets `groups.<tab>.status` to `"processed"` / `"processed-with-errors"` and stamps `processedAt`. Never write a session-level `status`.
-- Gmail emails of a reviewed `gabriel-arina` group (every action, archive included): add `decision.labels − labels`, remove `labels − decision.labels`.
+- **One side per run** ("both" = two runs, Gabriel first). **Gate first:** if `groups[side].status` is `pending-review`, stop for that side and touch nothing — Gabriel must Confirm or Skip it first.
+- When `status === "reviewed"`, apply the side's items. Never touch a side that is `skipped` (its `decision` blocks are drafts Gabriel chose not to apply — leave the status `skipped`) or already `processed`.
+- After processing, `session_finish_group` sets `groups[side].status` to `"processed"` / `"processed-with-errors"` and stamps `processedAt`. Never write a session-level `status`.
+- Gmail emails of a reviewed `gabriel-arina` session (every action, archive included): add `decision.labels − labels`, remove `labels − decision.labels`.
 - Email actions decide inbox vs archive only: `archive` → archive; `flag` → keep in inbox; `create-task` → create the task from `decision.task ?? suggestedTask` (the page guarantees one of them) in the mailbox's backend, keep in inbox; `update-task` → apply the matched task's `decision.edits`, keep in inbox; `complete-task` / `cancel-task` → complete the task (cancel adds a "Cancelled DD Mon: …" line) **and** archive the email. Never delete, never reply.
-- Star/flag, every email of a reviewed group: `decision.flagged !== isFlagged` → Gmail add/remove `STARRED` / Outlook `flag_email` flagged / notFlagged; equal → nothing. Never touch `systemLabels`.
+- Star/flag, every email of a reviewed session: `decision.flagged !== isFlagged` → Gmail add/remove `STARRED` / Outlook `flag_email` flagged / notFlagged; equal → nothing. Never touch `systemLabels`.
 - Existing tasks: re-read the live task, apply `edits` (only `notes` / `dueDate` / `link`, never a title; keep the `[triage]` footer), then `complete` / `cancel`. A task already completed is left alone.
 - `newTasks`: create each in the backend named by its `provider`.
-- Stamp a string outcome on each processed item (`outcome`, via `session_record_outcomes`), plus the group-level status described above.
+- Stamp a string outcome on each processed item (`outcome`, via `session_record_outcomes`), plus the status described above.
 
 ---
 
 ## 6. Triage rules — `rules.html`, sender chip, `/api/context`
 
-The **triage context** is what pa-email-triage follows when it classifies: properties, tracked senders, the Gmail label registry + label guide, tracked topics, the ignore list, free-form rules and run settings. It lives in the same Blobs store (key `context`) and replaces the old `task-context.md`. It is **separate from the session** — editing it never changes the review on screen; it applies from the next pa-email-triage run.
+The **triage context** is what pa-email-triage follows when it classifies: properties, tracked senders, the Gmail label registry + label guide, tracked topics, the ignore list, free-form rules and run settings. There is **one per side** (Blobs keys `context-gabriel`, `context-gabriel-arina`) — it replaces the old `task-context.md`. It is **separate from the session** — editing it never changes the review on screen; it applies from the next pa-email-triage run.
 
-- **`rules.html`** ("Triage Rules", header **Rules** link; deep links such as `rules.html#senders`) — tabs **Senders**, **Properties**, **Gmail labels** (+ label guide), **Topics**, **Ignore list**, **Rules** (ordered, each on/off), **Run settings**, **History** (view or restore any replaced version). Every change saves at once: re-read, apply, `PUT`; a `412` re-applies the same change to the fresh copy (3 attempts), so two open pages never overwrite each other. Sign-in from this page returns to it (`/api/auth/login?type=rules`).
+- **`rules.html`** ("Triage Rules — <side>", header **Rules** link keeps the side; `?type=gabriel` for Gabriel, no parameter for Gabriel & Arina; deep links such as `rules.html?type=gabriel#senders`) — tabs **Senders**, **Properties**, **Gmail labels** (+ label guide), **Topics**, **Ignore list**, **Rules** (ordered, each on/off), **Run settings**, **History** (view or restore any replaced version). Every change saves at once: re-read, apply, `PUT`; a `412` re-applies the same change to the fresh copy (3 attempts), so two open pages never overwrite each other. Sign-in from this page returns to it (`/api/auth/login?type=rules` / `rules-gabriel`).
 - **Sender chip** on the review page — after each head's sender: `👤 relationship · P# property` when the sender matches a rule (exact address first, then `@domain`), else **+ sender rule**; an amber **ignored** chip when the sender is on the ignore list. Clicking opens the **Sender rule** panel (name, addresses / `@domains`, relationship, property, Gmail label, notes, **Ignore this sender**, **Add a rule**). **Confirm** saves to the context immediately, the same way as the Rules page. Disabled on locked tabs.
-- **`/api/context`** (signed in) — `GET` → the context + `X-Context-ETag` (`404` if never loaded); `GET ?history` → replaced versions, newest first; `GET ?version=<key>` → one of them. `PUT` replaces the whole document with `X-Context-ETag` (`428` missing, `412` stale, `422` invalid with `details[]`, `403` bad `Origin`); the server stamps `updatedAt` / `updatedBy`, keeps the replaced version under `context-history/<iso>` and prunes to the newest 50. `PUT` never creates — the first copy is loaded once with `netlify blobs:set triage context --input <file>`.
-- **`context_get`** (connector, read-only) — `format: "markdown"` (default) → `{ updatedAt, markdown }`, the document step 1 follows; `"json"` → the raw context. `NO_CONTEXT` if it was never loaded.
+- **`/api/context?side=`** (signed in) — `GET` → that side's context + `X-Context-ETag` (`404` if never loaded); `&history` → replaced versions, newest first; `&version=<key>` → one of them. `PUT` replaces the whole document with `X-Context-ETag` (`428` missing, `412` stale, `422` invalid with `details[]`, `403` bad `Origin`); the server stamps `updatedAt` / `updatedBy`, keeps the replaced version under `context-history/<side>/<iso>` and prunes to the newest 50. `PUT` never creates — each side's first copy is loaded once with `netlify blobs:set triage context-<side> --input <file>`.
+- **`context_get { side }`** (connector, read-only) — `format: "markdown"` (default) → `{ side, updatedAt, markdown }`, the document step 1 follows; `"json"` → the raw context. `NO_CONTEXT` if that side has none.
 
 The real context names people, addresses and properties — it never goes in this repo; tests use a synthetic one.
 
@@ -186,8 +188,8 @@ The real context names people, addresses and properties — it never goes in thi
 | `triage-session.schema.jsonc` | Annotated example of the session — the single contract every skill and the page must follow |
 | `public/triage-review.html` | the review page — vanilla JS + CSS in one file |
 | `public/rules.html` | the Triage Rules page — same conventions |
-| `netlify/lib/` | `contract.ts` (zod mirror of the schema), `session-ops.ts` (pure session logic), `context.ts` (triage context: zod schema, checks, markdown rendering), `store.ts` (Blobs), `auth.ts` (cookie, env) |
-| `netlify/functions/` | `/api/auth/login`, `/api/auth/callback`, `/api/auth/logout`, `/api/session`, `/api/context`, `/mcp/:secret` |
+| `netlify/lib/` | `contract.ts` (zod mirror of the schema), `session-ops.ts` (pure session logic), `context.ts` (triage context: zod schema, checks, markdown rendering), `summary.ts` (run summary shape), `store.ts` (Blobs), `auth.ts` (cookie, env) |
+| `netlify/functions/` | `/api/auth/login`, `/api/auth/callback`, `/api/auth/logout`, `/api/session`, `/api/context`, `/api/summary`, `/mcp/:secret` |
 | `test/` | `node --test` unit tests + **synthetic** fixtures (never real mail or a real context) |
 | `netlify.toml`, `package.json`, `tsconfig.json` | site config, the six dependencies, strict TypeScript (`noEmit`) |
 | `CLAUDE.md` | guidance for Claude Code (decision model, contract, editing tips) |

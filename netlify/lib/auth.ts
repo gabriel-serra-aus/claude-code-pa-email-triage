@@ -84,18 +84,21 @@ export function clearOauthCookie(): string {
 }
 
 /** `?type=` survives the sign-in round trip only as one of these — never a free-form return target.
- *  `rules` returns to the Rules page instead of the review page. */
-export function pageType(value: string | null): "gabriel" | "gna" | "rules" | null {
-  return value === "gabriel" || value === "gna" || value === "rules" ? value : null;
+ *  The side is Gabriel & Arina unless the type says `gabriel`; `rules…` returns to the Rules page. */
+const PAGE_TYPES = ["gabriel", "rules", "rules-gabriel"] as const;
+export type PageType = (typeof PAGE_TYPES)[number];
+export function pageType(value: string | null): PageType | null {
+  return PAGE_TYPES.find((t) => t === value) ?? null;
 }
 
 export const PAGE = "/triage-review.html";
 export const RULES_PAGE = "/rules.html";
 
 /** Where the sign-in round trip lands for a `pageType`. */
-export function landingFor(type: ReturnType<typeof pageType>): string {
+export function landingFor(type: PageType | null): string {
   if (type === "rules") return RULES_PAGE;
-  return type ? `${PAGE}?type=${type}` : PAGE;
+  if (type === "rules-gabriel") return `${RULES_PAGE}?type=gabriel`;
+  return type === "gabriel" ? `${PAGE}?type=gabriel` : PAGE;
 }
 
 /**

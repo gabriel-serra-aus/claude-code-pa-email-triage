@@ -189,6 +189,22 @@
   }
   /* A confirmed tab is read-only until the save skill has run */
   .tab-locked { pointer-events: none; opacity: .55; }
+  .summary-panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 16px;
+    margin-bottom: 16px;
+  }
+  .summary-panel > summary { cursor: pointer; font-weight: 600; }
+  .summary-panel .summary-meta { font-weight: 400; color: var(--muted); font-size: 12.5px; margin-left: 6px; }
+  .summary-body { font-size: 13.5px; line-height: 1.5; overflow-x: auto; }
+  .summary-body h1, .summary-body h2, .summary-body h3, .summary-body h4 { font-size: 14.5px; margin: 14px 0 6px; }
+  .summary-body table { border-collapse: collapse; margin: 6px 0; }
+  .summary-body th, .summary-body td { border: 1px solid var(--border); padding: 3px 8px; text-align: left; vertical-align: top; }
+  .summary-body code { background: var(--chip); border-radius: 4px; padding: 0 4px; }
+  .summary-body ul, .summary-body ol { margin: 4px 0; padding-left: 22px; }
+  .summary-body p { margin: 6px 0; }
   .locked-banner {
     background: var(--green-bg);
     border: 1px solid var(--green, #16a34a);
@@ -708,11 +724,11 @@
 
 <header>
   <div>
-    <h1>Email Triage Review <span class="version" id="app-version">v2026.10.03 - 14-02</span></h1>
+    <h1>Email Triage Review <span class="version" id="app-version">v2026.10.03 - 15-30</span></h1>
     <div class="meta" id="header-meta">No session loaded</div>
   </div>
   <div class="header-actions">
-    <a class="btn" href="/rules.html" title="Senders, labels, topics, ignore list and rules triage follows">Rules</a>
+    <a class="btn" id="link-rules" href="/rules.html" title="Senders, labels, topics, ignore list and rules triage follows">Rules</a>
     <button class="btn theme-toggle" id="btn-theme" title="Toggle light / dark mode">🌙 Dark</button>
     <!-- Shown when the sign-in expired mid-review: a NEW tab, so in-memory edits survive here. -->
     <a class="btn btn-primary hidden" id="link-signin" href="/api/auth/login" target="_blank" rel="noopener">Sign in</a>
@@ -740,6 +756,11 @@
          Each tab has its OWN status (session.groups.<tab>.status):
          pending-review → editable · reviewed / skipped → locked · processed → outcome summary -->
     <div class="tabs" id="tabs"></div>
+    <!-- The run summary pa-email-triage stored with this side's session (/api/summary) -->
+    <details class="summary-panel hidden" id="summary-panel">
+      <summary>Run summary<span class="summary-meta" id="summary-meta"></span></summary>
+      <div class="summary-body" id="summary-body"></div>
+    </details>
     <div class="locked-banner hidden" id="locked-banner"></div>
 
     <!-- Processed tab: read-only outcome summary for that group only -->
@@ -874,7 +895,7 @@
     </div>
     <div class="modal-error hidden" id="s-error"></div>
     <div class="modal-actions">
-      <a class="btn" href="/rules.html#senders" target="_blank" rel="noopener" style="margin-right:auto">All rules ↗</a>
+      <a class="btn" id="link-rules-senders" href="/rules.html#senders" target="_blank" rel="noopener" style="margin-right:auto">All rules ↗</a>
       <button class="btn" id="s-cancel">Cancel</button>
       <button class="btn btn-primary" id="s-apply">Confirm</button>
     </div>
@@ -889,13 +910,16 @@
 /* ══════════════════════════════════════════════════════════════════════
    Email Triage Review — static review page, hosted on Netlify.
 
-   Reads and writes ONE session through /api/session (GET, then PUT with
-   X-Session-ETag), signed in with Google via /api/auth/*. It talks to nothing else
+   ONE SIDE PER PAGE. No parameter (or ?type=gabriel-arina) = Gabriel & Arina,
+   ?type=gabriel = Gabriel; anything else is an error, never a fallback. Each side
+   has its own session, rules and summary — this page never sees the other side.
+
+   Reads and writes that side's session through /api/session?side= (GET, then PUT
+   with X-Session-ETag), signed in with Google via /api/auth/*. It talks to nothing else
    — no Gmail/Outlook/task-app calls: pa-email-triage publishes the session,
-   this page edits the `decision` blocks + newTasks and flips the status of
-   the confirmed GROUP (session.groups.gabriel / ["gabriel-arina"]) to "reviewed" or
-   "skipped"; pa-email-triage-save runs only once NEITHER group is
-   "pending-review", applies the "reviewed" ones and leaves "skipped" alone.
+   this page edits the `decision` blocks + newTasks and flips the session's status
+   (session.groups[side]) to "reviewed" or "skipped"; pa-email-triage-save
+   applies a "reviewed" session and leaves a "skipped" one alone.
 
    Tasks live in Google Tasks (Gabriel & Arina Gmail) and Microsoft To Do
    (Outlook) — there is no group and no task tag anywhere. A task's
@@ -976,31 +1000,27 @@ const TITLE_PREFIXES = [
   { label: "properties/st huberts", prefix: "Huberts: " },
 ];
 
-// ── Tabs ──────────────────────────────────────────────────────────────
+// ── The side (one per page, one tab) ──────────────────────────────────
 // gabriel       = Outlook emails + Microsoft To Do tasks (provider "todo")
 // gabriel-arina = Gmail emails   + Google Tasks       (provider "gtasks")
-// Each tab is confirmed & saved on its own and has its OWN status in
-// session.groups[tab] = { status, reviewedAt, processedAt }:
+// The session is that side's alone; its status lives in
+// session.groups[side] = { status, reviewedAt, processedAt }:
 //   "pending-review" → "reviewed" | "skipped" (this page)
 //   "reviewed"       → "processed" | "processed-with-errors" (save skill)
-// pa-email-triage-save refuses to run while either group is "pending-review";
-// it then applies the "reviewed" groups and leaves "skipped" ones untouched
-// (they stay "skipped" — Gabriel can reopen a skipped tab here until then).
-// There is NO top-level status: groups.gabriel / groups["gabriel-arina"] are the only
-// two statuses in the file (ensureGroups drops anything else under `groups`).
+// pa-email-triage-save applies a "reviewed" session and leaves a "skipped" one
+// untouched (Gabriel can reopen a skipped one here until then). There is NO
+// top-level status, and `groups` holds only the side's key.
 const GROUP_STATUSES = ["pending-review", "reviewed", "skipped", "processed", "processed-with-errors"];
 const ALL_TABS = [
   { id: "gabriel",       label: "Gabriel",         icon: "👤" },
   { id: "gabriel-arina", label: "Gabriel & Arina", icon: "👥" },
 ];
-// URL switch: ?type=gna shows ONLY the Gabriel & Arina tab, ?type=gabriel
-// shows ONLY Gabriel. Anything else / no parameter shows both tabs.
-// A hidden tab is simply left alone: its group stays "pending-review" and the
-// save skill will not touch it until it is confirmed from its own page.
-const URL_TYPE = (new URLSearchParams(location.search).get("type") || "").toLowerCase();
-const TABS = URL_TYPE === "gna"     ? ALL_TABS.filter((t) => t.id === "gabriel-arina")
-           : URL_TYPE === "gabriel" ? ALL_TABS.filter((t) => t.id === "gabriel")
-           : ALL_TABS;
+// ?type=gabriel → Gabriel; no parameter or ?type=gabriel-arina → Gabriel & Arina.
+// Anything else → SIDE is null and the page says so instead of loading anything.
+const URL_TYPE = new URLSearchParams(location.search).get("type");
+const SIDE = URL_TYPE === null || URL_TYPE === "" || URL_TYPE === GNA_TAB ? GNA_TAB
+           : URL_TYPE === "gabriel" ? "gabriel" : null;
+const TABS = ALL_TABS.filter((t) => t.id === SIDE);
 function emailInTab(e, tab) {
   return tab === GNA_TAB ? e.source === "gmail" : e.source !== "gmail";
 }
@@ -1018,17 +1038,14 @@ function tabProcessed(tab, s = session) { return /^processed/.test(groupStatus(t
 /** Confirmed = no longer editable here (reviewed, skipped or already processed). */
 function tabConfirmed(tab, s = session) { return !tabPending(tab, s); }
 
-/** Make sure `s.groups` holds exactly the two group entries, each with a valid
- *  status. A missing or unreadable entry starts at "pending-review". */
+/** Make sure `s.groups` holds exactly the side's entry with a valid status.
+ *  A missing or unreadable entry starts at "pending-review". */
 function ensureGroups(s) {
   const g = s.groups || {};
-  for (const t of ALL_TABS) {
-    if (!g[t.id] || !GROUP_STATUSES.includes(g[t.id].status)) {
-      g[t.id] = { status: "pending-review", reviewedAt: null, processedAt: null };
-    }
+  if (!g[SIDE] || !GROUP_STATUSES.includes(g[SIDE].status)) {
+    g[SIDE] = { status: "pending-review", reviewedAt: null, processedAt: null };
   }
-  // Exactly two groups, nothing else.
-  s.groups = { gabriel: g.gabriel, "gabriel-arina": g[GNA_TAB] };
+  s.groups = { [SIDE]: g[SIDE] };
   return g;
 }
 
@@ -1056,7 +1073,7 @@ let session = null;     // the ENTIRE parsed JSON — mutated in place so
                          // every field the app doesn't touch is preserved
 // `expanded` = threadIds whose earlier messages are unfolded. In memory only —
 // never written to the file, and reset whenever a session is loaded.
-let ui = { sortCol: "date", sortDir: "desc", filter: "All", tab: TABS[0].id, expanded: new Set(), labelPicker: null };
+let ui = { sortCol: "date", sortDir: "desc", filter: "All", tab: SIDE, expanded: new Set(), labelPicker: null };
 
 // ── Small helpers ─────────────────────────────────────────────────────
 const $ = (id) => document.getElementById(id);
@@ -1161,7 +1178,7 @@ function etagOf(res) { return res.headers.get("X-Session-ETag") || res.headers.g
 
 /** The stored session as text + the ETag a later write must match. */
 async function readSession() {
-  const res = await fetch("/api/session", { cache: "no-store" });
+  const res = await fetch(`/api/session?side=${SIDE}`, { cache: "no-store" });
   if (res.status === 401) throw new AuthRequired("Sign in required");
   signedIn = true;
   $("link-signin").classList.add("hidden");
@@ -1172,7 +1189,7 @@ async function readSession() {
 
 /** Writes the whole session over the copy `etag` came from; returns the new ETag. */
 async function writeSession(text, etag) {
-  const res = await fetch("/api/session", {
+  const res = await fetch(`/api/session?side=${SIDE}`, {
     method: "PUT",
     // Netlify's edge strips If-Match on the way to the function; X-Session-ETag is what the server checks.
     headers: { "Content-Type": "application/json", "If-Match": etag, "X-Session-ETag": etag },
@@ -1188,7 +1205,7 @@ async function writeSession(text, etag) {
   return etagOf(res);
 }
 
-// ── Triage context: /api/context (the rules pa-email-triage follows) ──
+// ── Triage context: /api/context?side= (this side's rules pa-email-triage follows) ──
 // Read once on load to show who each sender is. A sender-rule Confirm saves
 // at once — re-read, apply the change, PUT with X-Context-ETag, and on a lost
 // race (412) redo the same change on the fresh copy. Separate from the
@@ -1196,7 +1213,7 @@ async function writeSession(text, etag) {
 let ctx = null;   // the context, or null when it could not be read
 
 async function readContext() {
-  const res = await fetch("/api/context", { cache: "no-store" });
+  const res = await fetch(`/api/context?side=${SIDE}`, { cache: "no-store" });
   if (res.status === 401) throw new AuthRequired("Sign in required");
   if (!res.ok) throw new Error(`Could not load the triage rules (${res.status})`);
   return { doc: await res.json(), etag: res.headers.get("X-Context-ETag") || res.headers.get("ETag") };
@@ -1214,7 +1231,7 @@ async function saveContextChange(change) {
   for (let attempt = 0; attempt < 3; attempt++) {
     const fresh = await readContext();
     change(fresh.doc);
-    const res = await fetch("/api/context", {
+    const res = await fetch(`/api/context?side=${SIDE}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json", "If-Match": fresh.etag, "X-Context-ETag": fresh.etag },
       body: JSON.stringify(fresh.doc),
@@ -1230,6 +1247,54 @@ async function saveContextChange(change) {
     return;
   }
   throw new Error("The triage rules kept changing — try again");
+}
+
+// ── Run summary: /api/summary?side= (written by pa-email-triage with the session) ──
+async function loadSummary() {
+  $("summary-panel").classList.add("hidden");
+  const res = await fetch(`/api/summary?side=${SIDE}`, { cache: "no-store" });
+  if (res.status === 404 || res.status === 401) return;
+  if (!res.ok) { showToast(`Could not load the run summary (${res.status})`); return; }
+  const summary = await res.json();
+  $("summary-meta").textContent = ` · published ${formatDate(summary.publishedAt)}` +
+    (summary.generatedAt !== session.generatedAt ? " — not this session's" : "");
+  $("summary-body").innerHTML = markdownHTML(summary.markdown);
+  $("summary-panel").classList.remove("hidden");
+}
+
+/** Just enough markdown for the summary: headings, lists, tables, paragraphs,
+ *  **bold** and `code`. Every string goes through esc() first. */
+function markdownHTML(md) {
+  const inline = (t) => esc(t).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+  const cells = (row) => row.trim().replace(/^\|/, "").replace(/\|$/, "").split(/(?<!\\)\|/).map((c) => c.trim().replace(/\\\|/g, "|"));
+  const lines = md.replace(/\r\n/g, "\n").split("\n");
+  const out = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const heading = /^(#{1,6})\s+(.*)$/.exec(line);
+    if (heading) { const n = Math.min(heading[1].length + 1, 4); out.push(`<h${n}>${inline(heading[2])}</h${n}>`); continue; }
+    if (/^\s*\|/.test(line)) {
+      const rows = [];
+      while (i < lines.length && /^\s*\|/.test(lines[i])) rows.push(lines[i++]);
+      i--;
+      const body = rows.filter((r) => !/^\s*\|[\s:|-]+\|\s*$/.test(r));
+      const [head, ...rest] = body;
+      out.push("<table>" + (head ? `<tr>${cells(head).map((c) => `<th>${inline(c)}</th>`).join("")}</tr>` : "") +
+        rest.map((r) => `<tr>${cells(r).map((c) => `<td>${inline(c)}</td>`).join("")}</tr>`).join("") + "</table>");
+      continue;
+    }
+    if (/^\s*([-*]|\d+\.)\s+/.test(line)) {
+      const ordered = /^\s*\d+\./.test(line);
+      const items = [];
+      while (i < lines.length && /^\s*([-*]|\d+\.)\s+/.test(lines[i])) items.push(lines[i++].replace(/^\s*([-*]|\d+\.)\s+/, ""));
+      i--;
+      out.push(`<${ordered ? "ol" : "ul"}>${items.map((x) => `<li>${inline(x)}</li>`).join("")}</${ordered ? "ol" : "ul"}>`);
+      continue;
+    }
+    if (line.trim() === "" || /^-{3,}$/.test(line.trim())) continue;
+    out.push(`<p>${inline(line)}</p>`);
+  }
+  return out.join("");
 }
 
 /** The context's sender for an address: exact address first, then its @domain. */
@@ -1348,13 +1413,16 @@ function setSignedOut() {
   $("link-signin").classList.toggle("hidden", !session);
 }
 
-/** Sign-in links carry ?type= through the Google round trip; ?auth=denied is
- *  what the callback sends back for an account that is not allowed. */
+/** Sign-in links carry the side through the Google round trip (Gabriel & Arina is
+ *  the default, so only ?type=gabriel travels); ?auth=denied is what the callback
+ *  sends back for an account that is not allowed. The Rules link keeps the side. */
 let authDenied = false;
 function initSignIn() {
-  const login = "/api/auth/login" + (URL_TYPE === "gna" || URL_TYPE === "gabriel" ? `?type=${URL_TYPE}` : "");
+  const login = "/api/auth/login" + (SIDE === "gabriel" ? "?type=gabriel" : "");
   $("btn-open").href = login;
   $("link-signin").href = login;
+  $("link-rules").href = "/rules.html" + (SIDE === "gabriel" ? "?type=gabriel" : "");
+  $("link-rules-senders").href = "/rules.html" + (SIDE === "gabriel" ? "?type=gabriel" : "") + "#senders";
   const params = new URLSearchParams(location.search);
   if (params.get("auth") !== "denied") return;
   authDenied = true;
@@ -1383,7 +1451,7 @@ async function loadSession() {
     if (err instanceof AuthRequired) {
       setSignedOut();
       $("landing-note").textContent = authDenied ? "This Google account is not allowed." : "";
-    } else if (err instanceof NoSession) $("landing-note").textContent = "No session yet — run pa-email-triage.";
+    } else if (err instanceof NoSession) $("landing-note").textContent = `No ${TABS[0].label} session yet — run pa-email-triage for ${TABS[0].label}.`;
     else showToast(err.message);
     render();
     return;
@@ -1394,12 +1462,11 @@ async function loadSession() {
   $("link-signin").classList.add("hidden");
   applyLoadDefaults();
   ui.filter = "All";
-  ui.tab = TABS[0].id;
+  ui.tab = SIDE;
   ui.expanded = new Set();
   ui.labelPicker = null;
-  const firstOpen = TABS.find((t) => tabPending(t.id)) || TABS[0];
-  ui.tab = firstOpen.id;
   render();
+  await loadSummary();
 }
 
 /** Fill in what pa-email-triage is allowed to omit: the `decision` blocks,
@@ -2199,23 +2266,8 @@ function materializeDecisions() {
   }
 }
 
-/** Take everything belonging to `tab` from the on-disk copy: the group was
- *  confirmed/processed elsewhere (another browser tab, or the save skill), so
- *  the in-memory version of it is stale and must not be written back. */
-function adoptGroupFromDisk(onDisk, tab) {
-  const byId = new Map((onDisk.emails || []).map((e) => [e.id, e]));
-  session.emails = session.emails.map((e) => (emailInTab(e, tab) && byId.get(e.id)) || e);
-  const byKey = new Map((onDisk.existingTasks || []).map((t) => [t.key, t]));
-  session.existingTasks = session.existingTasks.map((t) => (taskInTab(t, tab) && byKey.get(t.key)) || t);
-  session.newTasks = [
-    ...session.newTasks.filter((t) => !taskInTab(t, tab)),
-    ...(onDisk.newTasks || []).filter((t) => taskInTab(t, tab)),
-  ];
-}
-
-/** The one place the file is written. Moves THIS tab's group from
- *  `expectedOnDisk` to `status`, guarded against a stale browser tab, adopting
- *  the other group from disk if it moved on. Returns true when written. */
+/** The one place the session is written. Moves the side's status from
+ *  `expectedOnDisk` to `status`, guarded against a stale browser tab. Returns true when written. */
 async function writeGroupStatus(tab, status, expectedOnDisk, toast) {
   const label = TABS.find((t) => t.id === tab).label;
   const before = JSON.parse(JSON.stringify(session.groups));
@@ -2230,14 +2282,7 @@ async function writeGroupStatus(tab, status, expectedOnDisk, toast) {
       showToast(`Not saved — ${label} is already "${groupStatus(tab, onDisk)}". Reload to see it.`);
       return false;
     }
-    // The OTHER group is the disk's business if it moved on since we loaded.
-    for (const t of ALL_TABS) {
-      if (t.id === tab) continue;
-      session.groups[t.id] = onDisk.groups[t.id];
-      if (!tabPending(t.id, onDisk)) adoptGroupFromDisk(onDisk, t.id);
-    }
-
-    // Only THIS group changes. reviewedAt = when Gabriel decided (confirm or
+    // Only the status changes. reviewedAt = when Gabriel decided (confirm or
     // skip); null again when a skipped tab is reopened.
     const reviewedAt = status === "pending-review" ? null : new Date().toISOString();
     session.groups[tab] = { ...session.groups[tab], status, reviewedAt, processedAt: null };
@@ -2258,13 +2303,6 @@ async function writeGroupStatus(tab, status, expectedOnDisk, toast) {
   }
 }
 
-/** Jump to the other still-open tab, if any, then re-render. */
-function gotoNextPendingTab() {
-  const next = TABS.find((t) => tabPending(t.id));
-  if (next) ui.tab = next.id;
-  render();
-}
-
 async function confirmSave() {
   const tab = ui.tab;
   if (tabConfirmed(tab)) return;
@@ -2273,7 +2311,7 @@ async function confirmSave() {
   // Per-group confirm: only THIS group becomes "reviewed". The save skill
   // applies reviewed groups and skips "skipped" ones.
   if (await writeGroupStatus(tab, "reviewed", "pending-review", `Saved — ${label} marked as reviewed`)) {
-    gotoNextPendingTab();
+    render();
   }
 }
 
@@ -2285,7 +2323,7 @@ async function skipGroup() {
   materializeDecisions();
   const label = TABS.find((t) => t.id === tab).label;
   if (await writeGroupStatus(tab, "skipped", "pending-review", `Skipped — ${label}; pa-email-triage-save will leave it alone`)) {
-    gotoNextPendingTab();
+    render();
   }
 }
 
@@ -2496,6 +2534,13 @@ document.addEventListener("keydown", (ev) => {
 // Boot: signed in → straight into the session; otherwise the landing card.
 (async function boot() {
   initTheme();
+  if (!SIDE) {
+    $("screen-landing").classList.remove("hidden");
+    $("btn-open").classList.add("hidden");
+    $("landing-note").textContent = `Unknown ?type=${URL_TYPE} — open this page with no parameter for Gabriel & Arina, or ?type=gabriel for Gabriel.`;
+    return;
+  }
+  document.title = `Email Triage Review — ${TABS[0].label}`;
   initSignIn();
   render();
   await loadSession();

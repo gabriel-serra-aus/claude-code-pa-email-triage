@@ -1,19 +1,24 @@
 // =============================================================================
-//  triage-session — the ONE session shared by the three steps of the loop
+//  triage-session — ONE SIDE's session, shared by the three steps of the loop
 // =============================================================================
 //
-//  Location:  Netlify Blobs, store "triage", key "session" (step 1's work in
-//             progress is key "draft"). Only the Netlify Functions touch the
-//             store; there is no local file.
+//  Two sides, never mixed — each has its own session, context and summary:
+//     "gabriel"       Outlook + Microsoft To Do   (page: triage-review.html?type=gabriel)
+//     "gabriel-arina" shared Gmail + Google Tasks (page: triage-review.html, no parameter)
 //
-//  Step 1  pa-email-triage        (Cowork skill)  → CREATES the session through the
+//  Location:  Netlify Blobs, store "triage", key "session-<side>" (step 1's work
+//             in progress is "draft-<side>", its run summary "summary-<side>",
+//             the triage rules "context-<side>"). Only the Netlify Functions
+//             touch the store; there is no local file.
+//
+//  Step 1  pa-email-triage        (Cowork skill)  → CREATES a side's session through the
 //          "triage-session" connector: session_begin → session_add_emails /
-//          session_add_tasks (≤ 25 per call) → session_publish
-//  Step 2  triage-review.html     (Gabriel)       → EDITS decisions via GET /api/session and
-//          PUT /api/session (If-Match); Confirm or Skip ONE GROUP at a time
-//  Step 3  pa-email-triage-save   (Cowork skill)  → once no group is pending, APPLIES every
-//          "reviewed" group: session_status → session_get_work → session_record_outcomes →
-//          session_finish_group
+//          session_add_tasks (≤ 25 per call) → session_publish (+ summary). Every tool
+//          takes `side`.
+//  Step 2  triage-review.html     (Gabriel)       → EDITS decisions via GET /api/session?side=
+//          and PUT /api/session?side= (X-Session-ETag); Confirm or Skip the side
+//  Step 3  pa-email-triage-save   (Cowork skill)  → APPLIES a "reviewed" side:
+//          session_status → session_get_work → session_record_outcomes → session_finish_group
 //
 //  This is an annotated example, not a formal JSON Schema. Every key is listed
 //  with WHO writes it, and netlify/lib/contract.ts mirrors it in zod — this file
@@ -30,26 +35,28 @@
 //     Outlook                 → Microsoft To Do, default list (provider "todo")
 //  A task's IDENTITY is its `key` = "<provider>:<listId>:<taskId>". Emails point
 //  at one with `existingTaskKey`. `url` is an optional display link and may be
-//  null. There are no groups and no task tags anywhere in this file.
+//  null. There are no task groups and no task tags anywhere in this file.
 //
-//  ─── Groups / tabs (exactly two — there is NO session-level status) ─────────
-//  The file holds two independent review queues ("groups"). Each has its own
-//  status; nothing else in the session carries a status. `groups` has exactly the
-//  keys "gabriel" and "gabriel-arina" — never a third one.
+//  ─── Side (one per session — there is NO session-level status) ─────────────
+//  `side` names the session's side; `groups` has exactly ONE key, that side, and
+//  it holds the only status. Every item must belong to the side:
 //
-//     group key       | tab label       | which emails          | which tasks
+//     side            | page label      | which emails          | which tasks
 //     ----------------+-----------------+-----------------------+---------------------
-//     "gabriel"       | Gabriel         | source !== "gmail"    | provider === "todo"
+//     "gabriel"       | Gabriel         | source === "outlook"  | provider === "todo"
 //     "gabriel-arina" | Gabriel & Arina | source === "gmail"    | provider === "gtasks"
 //
-//  Group status lifecycle (one per group):
-//     "pending-review"        → written by step 1; the tab is editable on the page
-//     "reviewed"              → step 2, Confirm & Save on that tab; tab locked
-//     "skipped"               → step 2, Skip on that tab; tab locked (Reopen puts it back to pending)
-//     "processed"             → step 3, after applying a "reviewed" group
+//  Status lifecycle (groups[side].status):
+//     "pending-review"        → written by step 1; editable on the page
+//     "reviewed"              → step 2, Confirm & Save; locked
+//     "skipped"               → step 2, Skip; locked (Reopen puts it back to pending)
+//     "processed"             → step 3, after applying a "reviewed" session
 //     "processed-with-errors" → step 3, same but at least one item failed
-//  "skipped" groups stay "skipped" forever (step 3 never touches them).
-//  Step 3 refuses to run while EITHER group is still "pending-review".
+//  "skipped" stays "skipped" (step 3 never touches it). The two sides never wait
+//  for each other.
+//
+//  NOTE: the example below lists items of BOTH sides so every field shape is
+//  shown once. A real session holds only its own side's items.
 //
 //  ─── Threads: one row per conversation ─────────────────────────────────────
 //  For every thread with at least one message in the inbox, step 1 writes EVERY
@@ -152,6 +159,9 @@
 // =============================================================================
 {
   // ── Session-level ───────────────────────────────────────────────────────
+  // Step 1 (session_begin). "gabriel" | "gabriel-arina" — the session's side. Never changes.
+  "side": "gabriel-arina",
+
   // Step 1. ISO-8601 timestamp of when the triage ran. The page shows its age.
   "generatedAt": "2026-08-31T08:00:00.000Z",
 
@@ -160,21 +170,16 @@
   "mailboxes": ["outlook", "gmail"],
 
   // Step 1. All USER-CREATED labels of the Gabriel & Arina Gmail (system labels excluded).
-  // The page offers these as toggles on Gmail email rows.
+  // The page offers these as toggles on Gmail email rows. [] on the gabriel side.
   "gmailLabels": ["Travel", "properties/mount st", "properties/St Huberts"],
 
-  // Per-group status — THE thing step 3 keys off. Exactly two keys. Step 1 must
-  // write both as "pending-review". There is deliberately no top-level "status".
+  // The side's status — THE thing step 3 keys off. Exactly one key, the side.
+  // session_begin writes it "pending-review". There is deliberately no top-level "status".
   "groups": {
-    "gabriel": {
-      "status": "pending-review",   // see lifecycle above
-      "reviewedAt": null,           // step 2: ISO timestamp of Confirm or Skip on this tab (null again after Reopen)
-      "processedAt": null           // step 3: ISO timestamp when this group was applied
-    },
     "gabriel-arina": {
-      "status": "pending-review",
-      "reviewedAt": null,
-      "processedAt": null
+      "status": "pending-review",   // see lifecycle above
+      "reviewedAt": null,           // step 2: ISO timestamp of Confirm or Skip (null again after Reopen)
+      "processedAt": null           // step 3: ISO timestamp when the side was applied
     }
   },
 
@@ -190,7 +195,7 @@
       // Mailbox message id: the deep link on the page AND what step 3 acts on
       // (archive / star / labels), so it must be the real id for that source.
       "id": "18f3a2b9c0d1e999",
-      "source": "gmail",            // "gmail" → gabriel-arina tab · "outlook" → gabriel tab
+      "source": "gmail",            // "gmail" → gabriel-arina side · "outlook" → gabriel side
       "sourceId": "gmail:18f3a2b9c0d1e999",   // "<source>:<id>"
       "from": "Arina <arina@example.com>",
       "subject": "Re: Mount St plumber quote",
@@ -341,7 +346,7 @@
     {
       "title": "Renew passport",
       "notes": "-- notes\nExpires Feb 2027 — book appointment.\n\n-- auto --",
-      "provider": "todo",         // "gtasks" | "todo" — the tab it was added from
+      "provider": "todo",         // "gtasks" | "todo" — the side's backend
       "dueDate": "",
       "outcome": "created"        // step 3 only
     }
@@ -352,19 +357,22 @@
 //  Step-by-step responsibilities
 // =============================================================================
 //
-//  STEP 1 — pa-email-triage (creates the session through the connector tools)
-//    • session_status first: the overwrite gate. Continue only if no session
-//      exists or every group is processed / processed-with-errors / skipped;
-//      a pending-review or reviewed group means ask Gabriel — session_begin
-//      refuses it (WRONG_STATUS) unless called with discard: true.
-//    • session_begin { generatedAt, mailboxes, gmailLabels }: the server writes
-//      groups = { gabriel: {…}, "gabriel-arina": {…} }, both pending — exactly those
-//      two keys, each { status: "pending-review", reviewedAt: null, processedAt: null } —
-//      and newTasks: []. NO top-level status key. Then session_add_emails /
-//      session_add_tasks in batches of ≤ 25 (VALIDATION names the item and
-//      field; duplicates refused), and session_publish (checks the invariants
-//      below across the whole draft, then makes it live).
-//    • gmailLabels: every user-created label of the Gabriel & Arina Gmail.
+//  STEP 1 — pa-email-triage (creates ONE side's session through the connector tools;
+//  "both" = two independent runs, gabriel first)
+//    • context_get { side }: that side's rules. NO_CONTEXT → stop for that side.
+//    • session_status { side } first: the overwrite gate. Continue only if that side
+//      has no session or it is processed / processed-with-errors / skipped;
+//      pending-review or reviewed means ask Gabriel — session_begin refuses it
+//      (WRONG_STATUS) unless called with discard: true. The other side is irrelevant.
+//    • session_begin { side, generatedAt, mailboxes, gmailLabels }: the server writes
+//      side and groups = { <side>: { status: "pending-review", reviewedAt: null,
+//      processedAt: null } } and newTasks: []. NO top-level status key. Then
+//      session_add_emails / session_add_tasks { side, … } in batches of ≤ 25
+//      (VALIDATION names the item and field; duplicates and the other side's items
+//      refused), and session_publish { side, summary } (checks the invariants
+//      below across the whole draft, makes it live and stores the run summary as
+//      summary-<side>; summary_get { side } reads it back).
+//    • gmailLabels: every user-created label of the Gabriel & Arina Gmail ([] for gabriel).
 //    • mailboxes: which connectors were fetched.
 //    • emails[]: EVERY message of every thread that has at least one inbox
 //      message — id, source, sourceId, from, subject, date, summary, isFlagged,
@@ -383,30 +391,30 @@
 //      [triage] footer). New tasks get an empty `-- notes` section and a title
 //      that already carries the properties/* prefix.
 //
-//  STEP 2 — triage-review.html (GET /api/session, mutates in place, PUT per tab)
+//  STEP 2 — triage-review.html (GET /api/session?side=, mutates in place, PUT)
 //    • Fills every emails[].decision (incl. decision.labels for gmail and the
 //      DERIVED decisions of every child) and existingTasks[].decision, appends
 //      newTasks. Only heads are interactive; only the `-- notes` half of a
 //      description is editable; a task title is never written.
-//    • Confirm & Save on a tab: groups.<tab> = { status: "reviewed", reviewedAt: now,
-//      processedAt: null } for THAT TAB ONLY, then PUTs the whole session with
-//      If-Match. Skip on a tab: same with status "skipped". Reopen (skipped →
-//      pending) sets reviewedAt back to null. The other tab is never touched.
-//    • Refuses to write if the stored groups.<tab>.status is not what it last
+//    • Confirm & Save: groups[side] = { status: "reviewed", reviewedAt: now,
+//      processedAt: null }, then PUTs the whole session with X-Session-ETag.
+//      Skip: same with status "skipped". Reopen (skipped → pending) sets
+//      reviewedAt back to null. `side` is never changed.
+//    • Refuses to write if the stored groups[side].status is not what it last
 //      saw; the server refuses (412) if the stored session changed at all since
 //      the page re-read it, and (422) any change to a key the page does not own.
 //    • Never writes processedAt or any outcome field.
 //    • Assumes a session published by the current step 1 — there is no
 //      migration and no backwards compatibility.
 //
-//  STEP 3 — pa-email-triage-save (through the connector tools, per group)
-//    • GATE: session_status — if groups.gabriel.status or groups["gabriel-arina"].status
-//      is "pending-review", stop and change nothing — Gabriel must Confirm or Skip
-//      every tab first.
-//    • For EACH group whose groups.<g>.status === "reviewed" (session_get_work pages
+//  STEP 3 — pa-email-triage-save (through the connector tools, ONE side per run;
+//  "both" = two independent runs, gabriel first)
+//    • GATE: session_status { side } — "pending-review" → stop for that side and
+//      change nothing (Gabriel must Confirm or Skip it first). The other side is irrelevant.
+//    • When groups[side].status === "reviewed" (session_get_work { side, kind } pages
 //      through kinds emails / tasks / newTasks; for "processed-with-errors" it
 //      returns only items whose outcome starts with "failed", for a retry):
-//        – emails of that group: perform decision.emailAction (table above).
+//        – emails: perform decision.emailAction (table above).
 //          For "create-task" create decision.task ?? suggestedTask in that
 //          mailbox's task app (Google Tasks for gmail, To Do for outlook).
 //          Then star/flag: decision.flagged !== isFlagged → Gmail STARRED
@@ -414,21 +422,20 @@
 //          included. Gmail emails: also apply the USER label diff (labels →
 //          decision.labels); never touch systemLabels. An email with inInbox
 //          false is never moved back to the inbox.
-//        – existingTasks of that group: apply decision.edits (only the keys
+//        – existingTasks: apply decision.edits (only the keys
 //          present — notes / dueDate / link; never a title), then
 //          decision.complete → completed, decision.cancel → completed plus a
 //          "Cancelled DD Mon: …" line in the auto block. A task whose status is
 //          already "completed" is left alone.
-//        – newTasks of that group: create in the backend named by `provider`.
+//        – newTasks: create in the backend named by `provider`.
 //        – re-read the live task before writing so a `-- notes` section Gabriel
 //          typed since the fetch survives, and always keep the [triage] footer.
 //        – stamp `outcome` on every item touched (string; "FAILED: …" on errors)
-//          with session_record_outcomes — after each batch, so an interrupted
-//          run keeps its progress.
-//        – session_finish_group { group, status: "processed" | "processed-with-errors" }
-//          (the server stamps groups.<g>.processedAt).
-//    • Never touch a "skipped" group (leave its status "skipped") or one that is
+//          with session_record_outcomes { side, … } — after each batch, so an
+//          interrupted run keeps its progress.
+//        – session_finish_group { side, status: "processed" | "processed-with-errors" }
+//          (the server stamps groups[side].processedAt).
+//    • Never touch a "skipped" side (leave its status "skipped") or one that is
 //      already "processed" — the tools refuse it (WRONG_STATUS).
-//    • There is no top-level status (or any other session-level status) — the
-//      two group statuses are the only ones.
+//    • There is no top-level status — groups[side].status is the only one.
 // =============================================================================

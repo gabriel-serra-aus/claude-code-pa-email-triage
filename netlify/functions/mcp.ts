@@ -1,5 +1,7 @@
 // The "triage-session" connector both skills use. Stateless Streamable HTTP:
 // a new server + transport per request, no session ids, JSON responses.
+// Every tool takes a required `side` — the two sides are separate documents
+// (session, draft, context, summary) and no tool ever touches both.
 // Known weakness, accepted for v1: claude.ai custom connectors take OAuth or
 // nothing, so the secret sits in the URL path — bearer-token strength, no more.
 import { timingSafeEqual } from "node:crypto";
@@ -10,21 +12,22 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { env, respond } from "../lib/auth.ts";
 import { renderContextMarkdown, type TriageContext } from "../lib/context.ts";
-import { BeginSchema, GroupSchema, type Session } from "../lib/contract.ts";
+import { BeginSchema, GroupSchema, type Group, type Session } from "../lib/contract.ts";
 import {
   OpError, appendEmails, appendTasks, applyOutcomes, beginDraft, countsOf, extractWork, finishGroup, publishDraft,
   statusOf, type Draft, type OpErrorCode,
 } from "../lib/session-ops.ts";
+import { SUMMARY_MAX, type Summary } from "../lib/summary.ts";
 import { deleteDoc, readDoc, writeDoc, type DocKey } from "../lib/store.ts";
 
 const ATTEMPTS = 3;
 
-async function readLive(): Promise<Session | null> {
-  const stored = await readDoc("session");
+async function readLive(side: Group): Promise<Session | null> {
+  const stored = await readDoc(`session-${side}`);
   return stored ? (stored.doc as Session) : null;
 }
-async function readDraft(): Promise<Draft | null> {
-  const stored = await readDoc("draft");
+async function readDraft(side: Group): Promise<Draft | null> {
+  const stored = await readDoc(`draft-${side}`);
   return stored ? (stored.doc as Draft) : null;
 }
 
@@ -33,7 +36,7 @@ async function mutate<D, T>(key: DocKey, missing: OpErrorCode, patch: (doc: D) =
   for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
     const stored = await readDoc(key);
     if (!stored) {
-      throw new OpError(missing, missing === "NO_DRAFT" ? "no draft — call session_begin first" : "there is no live session");
+      throw new OpError(missing, missing === "NO_DRAFT" ? "no draft — call session_begin first" : `there is no live session (${key})`);
     }
     const result = patch(stored.doc as D);
     const { modified } = await writeDoc(key, stored.doc, { onlyIfMatch: stored.etag });
@@ -56,88 +59,100 @@ async function answer(run: () => Promise<unknown>): Promise<CallToolResult> {
 // `VALIDATION:` naming the email / task and the field, not as a generic schema error.
 const Batch = z.array(z.record(z.string(), z.unknown()));
 const Outcome = z.string().min(1);
+const side = GroupSchema.describe('"gabriel" (Outlook + Microsoft To Do) or "gabriel-arina" (shared Gmail + Google Tasks). Required — never guessed.');
 
 function buildServer(): McpServer {
-  const server = new McpServer({ name: "triage-session", version: "1.0.0" });
+  const server = new McpServer({ name: "triage-session", version: "2.0.0" });
 
   server.registerTool("session_status", {
-    description: "Whether a live triage session exists, its generatedAt, both group statuses and item counts per group, plus the state of step 1's draft. Never errors on a missing session: exists is false.",
-    inputSchema: {},
-  }, () => answer(async () => statusOf(await readLive(), await readDraft())));
+    description: "One side's live triage session: whether it exists, its generatedAt, its review status (group) and item counts, plus the state of step 1's draft for that side. Never errors on a missing session: exists is false.",
+    inputSchema: { side },
+  }, ({ side }) => answer(async () => statusOf(side, await readLive(side), await readDraft(side))));
 
   server.registerTool("session_begin", {
-    description: "Step 1: start a new DRAFT session, replacing any earlier draft. Refused (WRONG_STATUS) while the live session has a group that is pending-review or reviewed, unless discard is true — pass that only after Gabriel explicitly said to discard it.",
+    description: "Step 1: start a new DRAFT session for one side, replacing that side's earlier draft. Refused (WRONG_STATUS) while that side's live session is pending-review or reviewed, unless discard is true — pass that only after Gabriel explicitly said to discard it. The other side is never looked at.",
     inputSchema: BeginSchema.shape,
   }, (input) => answer(async () => {
-    await writeDoc("draft", beginDraft(await readLive(), input));
-    return { ok: true };
+    await writeDoc(`draft-${input.side}`, beginDraft(await readLive(input.side), input));
+    return { ok: true, side: input.side };
   }));
 
   server.registerTool("session_add_emails", {
-    description: "Step 1: append 1–25 emails to the draft. Each email is the session's email object WITHOUT decision / outcome. All or nothing: on VALIDATION fix the named field and resend the batch.",
-    inputSchema: { emails: Batch },
-  }, ({ emails }) => answer(() => mutate("draft", "NO_DRAFT", (draft: Draft) => {
+    description: "Step 1: append 1–25 emails to the side's draft. Each email is the session's email object WITHOUT decision / outcome, and must be that side's (gmail → gabriel-arina, outlook → gabriel). All or nothing: on VALIDATION fix the named field and resend the batch.",
+    inputSchema: { side, emails: Batch },
+  }, ({ side, emails }) => answer(() => mutate(`draft-${side}`, "NO_DRAFT", (draft: Draft) => {
     const added = appendEmails(draft, emails);
     return { added, totalEmails: draft.session.emails.length };
   })));
 
   server.registerTool("session_add_tasks", {
-    description: "Step 1: append 1–25 existing tasks to the draft. Each task is the session's existingTasks object WITHOUT decision / outcome. All or nothing.",
-    inputSchema: { existingTasks: Batch },
-  }, ({ existingTasks }) => answer(() => mutate("draft", "NO_DRAFT", (draft: Draft) => {
+    description: "Step 1: append 1–25 existing tasks to the side's draft. Each task is the session's existingTasks object WITHOUT decision / outcome, and must be that side's (gtasks → gabriel-arina, todo → gabriel). All or nothing.",
+    inputSchema: { side, existingTasks: Batch },
+  }, ({ side, existingTasks }) => answer(() => mutate(`draft-${side}`, "NO_DRAFT", (draft: Draft) => {
     const added = appendTasks(draft, existingTasks);
     return { added, totalTasks: draft.session.existingTasks.length };
   })));
 
   server.registerTool("session_publish", {
-    description: "Step 1: check the whole draft and make it the live session (both groups pending-review, newTasks empty), then delete the draft. On VALIDATION it lists every problem by thread / email / task.",
-    inputSchema: {},
-  }, () => answer(async () => {
-    const draft = await readDraft();
+    description: "Step 1: check the side's whole draft and make it that side's live session (pending-review, newTasks empty), store the run summary (markdown) as that side's summary, then delete the draft. On VALIDATION it lists every problem by thread / email / task.",
+    inputSchema: { side, summary: z.string().min(1).max(SUMMARY_MAX) },
+  }, ({ side, summary }) => answer(async () => {
+    const draft = await readDraft(side);
     if (!draft) throw new OpError("NO_DRAFT", "no draft — call session_begin first");
-    const session = publishDraft(await readLive(), draft);
-    await writeDoc("session", session);
-    await deleteDoc("draft");
-    return { ok: true, counts: countsOf(session) };
+    const session = publishDraft(await readLive(side), draft);
+    await writeDoc(`session-${side}`, session);
+    const stored: Summary = { side, generatedAt: session.generatedAt, publishedAt: new Date().toISOString(), markdown: summary };
+    await writeDoc(`summary-${side}`, stored);
+    await deleteDoc(`draft-${side}`);
+    return { ok: true, side, counts: countsOf(session) };
   }));
 
   server.registerTool("session_get_work", {
-    description: "Step 3: one page of what to apply for a group — kind emails (every message, heads and children), tasks (only existing tasks with something to do) or newTasks. Follow nextCursor until it is null. Only for a reviewed group (everything) or a processed-with-errors group (only items whose outcome starts with 'failed').",
+    description: "Step 3: one page of what to apply for a side — kind emails (every message, heads and children), tasks (only existing tasks with something to do) or newTasks. Follow nextCursor until it is null. Only for a reviewed session (everything) or a processed-with-errors one (only items whose outcome starts with 'failed').",
     inputSchema: {
-      group: GroupSchema,
+      side,
       kind: z.enum(["emails", "tasks", "newTasks"]),
       cursor: z.string().optional(),
       limit: z.number().int().min(1).max(50).optional(),
     },
-  }, ({ group, kind, cursor, limit }) => answer(async () => {
-    const live = await readLive();
-    if (!live) throw new OpError("NO_SESSION", "there is no live session");
-    return extractWork(live, group, kind, cursor, limit);
+  }, ({ side, kind, cursor, limit }) => answer(async () => {
+    const live = await readLive(side);
+    if (!live) throw new OpError("NO_SESSION", `there is no live ${side} session`);
+    return extractWork(live, kind, cursor, limit);
   }));
 
   server.registerTool("session_record_outcomes", {
-    description: "Step 3: stamp outcome strings on emails (by id), existing tasks (by key) and new tasks (by index from session_get_work). Call it after each batch of work so an interrupted run keeps its progress. Items not found in the group come back in unknown.",
+    description: "Step 3: stamp outcome strings on the side's emails (by id), existing tasks (by key) and new tasks (by index from session_get_work). Call it after each batch of work so an interrupted run keeps its progress. Items not found come back in unknown.",
     inputSchema: {
-      group: GroupSchema,
+      side,
       emails: z.array(z.object({ id: z.string(), outcome: Outcome })).optional(),
       tasks: z.array(z.object({ key: z.string(), outcome: Outcome })).optional(),
       newTasks: z.array(z.object({ index: z.number().int().min(0), outcome: Outcome })).optional(),
     },
-  }, ({ group, ...patch }) => answer(() => mutate("session", "NO_SESSION", (live: Session) => applyOutcomes(live, group, patch))));
+  }, ({ side, ...patch }) => answer(() => mutate(`session-${side}`, "NO_SESSION", (live: Session) => applyOutcomes(live, patch))));
 
   server.registerTool("session_finish_group", {
-    description: "Step 3: mark a reviewed (or processed-with-errors) group processed or processed-with-errors. The server stamps processedAt.",
-    inputSchema: { group: GroupSchema, status: z.enum(["processed", "processed-with-errors"]) },
-  }, ({ group, status }) => answer(() => mutate("session", "NO_SESSION", (live: Session) => finishGroup(live, group, status, new Date()))));
+    description: "Step 3: mark the side's reviewed (or processed-with-errors) session processed or processed-with-errors. The server stamps processedAt.",
+    inputSchema: { side, status: z.enum(["processed", "processed-with-errors"]) },
+  }, ({ side, status }) => answer(() => mutate(`session-${side}`, "NO_SESSION", (live: Session) => finishGroup(live, status, new Date()))));
 
   server.registerTool("context_get", {
-    description: "Step 1: the triage context (properties, tracked senders, Gmail label registry and guide, topics, ignore list, free-form rules, run settings) — what PA/Email Triage/task-context.md used to hold. Read-only: Gabriel edits it on the app's Rules page. format markdown (default) is the document to follow; json is the raw data. NO_CONTEXT if it was never loaded.",
-    inputSchema: { format: z.enum(["markdown", "json"]).optional() },
-  }, ({ format }) => answer(async () => {
-    const stored = await readDoc("context");
-    if (!stored) throw new OpError("NO_CONTEXT", "there is no triage context — stop and tell Gabriel");
+    description: "Step 1: one side's triage context (properties, tracked senders, Gmail label registry and guide, topics, ignore list, free-form rules, run settings). Read-only: Gabriel edits it on the app's Rules page. format markdown (default) is the document to follow; json is the raw data. NO_CONTEXT if that side's context was never created.",
+    inputSchema: { side, format: z.enum(["markdown", "json"]).optional() },
+  }, ({ side, format }) => answer(async () => {
+    const stored = await readDoc(`context-${side}`);
+    if (!stored) throw new OpError("NO_CONTEXT", `there is no ${side} triage context — stop and tell Gabriel`);
     const ctx = stored.doc as TriageContext;
-    return format === "json" ? ctx : { updatedAt: ctx.updatedAt, markdown: renderContextMarkdown(ctx) };
+    return format === "json" ? ctx : { side, updatedAt: ctx.updatedAt, markdown: renderContextMarkdown(ctx, side) };
+  }));
+
+  server.registerTool("summary_get", {
+    description: "One side's run summary (markdown) as stored by the last session_publish, with its generatedAt / publishedAt. NO_SUMMARY if that side has none yet.",
+    inputSchema: { side },
+  }, ({ side }) => answer(async () => {
+    const stored = await readDoc(`summary-${side}`);
+    if (!stored) throw new OpError("NO_SUMMARY", `there is no ${side} summary yet`);
+    return stored.doc as Summary;
   }));
 
   return server;

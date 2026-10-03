@@ -1,9 +1,11 @@
 // Netlify Blobs access. Only functions come through here — never the page, never the skills.
 import { getStore } from "@netlify/blobs";
+import type { Group } from "./contract.ts";
 
-/** `session` = live, what the page sees · `draft` = step 1's work in progress ·
- *  `context` = the triage context · `context-history/<iso>` = each replaced context. */
-export type DocKey = "session" | "draft" | "context" | `context-history/${string}`;
+/** Per side: `session-<side>` = live, what the page sees · `draft-<side>` = step 1's work in progress ·
+ *  `context-<side>` = the triage context · `summary-<side>` = step 1's run summary ·
+ *  `context-history/<side>/<iso>` = each replaced context. */
+export type DocKey = `${"session" | "draft" | "context" | "summary"}-${Group}` | `context-history/${Group}/${string}`;
 export type WriteCondition = { onlyIfMatch: string } | { onlyIfNew: true } | Record<string, never>;
 
 function store() {

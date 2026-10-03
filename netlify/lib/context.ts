@@ -1,9 +1,11 @@
 // The triage context: who matters, what to track, what to ignore, which Gmail
-// labels exist. Replaces PA/Email Triage/task-context.md. Edited only by the
-// pages (rules.html + the sender panel on triage-review.html) through
-// /api/context; step 1 reads it through the connector's `context_get`.
+// labels exist. One per side (`context-gabriel`, `context-gabriel-arina`).
+// Replaces PA/Email Triage/task-context.md. Edited only by the pages
+// (rules.html + the sender panel on triage-review.html) through
+// /api/context?side=; step 1 reads it through the connector's `context_get`.
 // Objects are strict: the pages own every key, so an unknown one is a bug.
 import { z } from "zod";
+import type { Group } from "./contract.ts";
 
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
 const isoDate = z.string().refine((s) => ISO.test(s) && !Number.isNaN(Date.parse(s)), "not an ISO-8601 timestamp");
@@ -108,7 +110,18 @@ export function prepareContextWrite(body: unknown, user: string, now: Date): { d
   return { doc: { ...doc, updatedAt: now.toISOString(), updatedBy: user } };
 }
 
-export const HISTORY_PREFIX = "context-history/";
+/** A context with every section and no entries — how a side starts. */
+export function emptyContext(): TriageContext {
+  return {
+    schemaVersion: 1, updatedAt: null, updatedBy: null,
+    properties: [], senders: [], labels: [], labelGuide: "", topics: [], ignore: [], rules: [], settings: [],
+  };
+}
+
+/** `context-history/<side>/` — each side keeps its own history. */
+export function historyPrefix(side: Group): `context-history/${Group}/` {
+  return `context-history/${side}/`;
+}
 export const HISTORY_KEEP = 50;
 
 /** History keys past the newest HISTORY_KEEP — what to delete. Keys sort by their ISO time. */
@@ -138,8 +151,13 @@ function table(head: string[], rows: string[][]): string {
   return [`| ${head.join(" | ")} |`, `|${head.map(() => "---").join("|")}|`, ...rows.map((r) => `| ${r.join(" | ")} |`)].join("\n");
 }
 
-/** The context as one markdown document, in the shape the old task-context.md had. */
-export function renderContextMarkdown(ctx: TriageContext): string {
+const SIDE_LINE: Record<Group, string> = {
+  gabriel: "Side: **Gabriel** — the Outlook mailbox and Microsoft To Do. Nothing here applies to the shared Gmail.",
+  "gabriel-arina": "Side: **Gabriel & Arina** — the shared Gmail (`gabrielandarina@gmail.com`) and Google Tasks. Nothing here applies to Outlook.",
+};
+
+/** One side's context as one markdown document, in the shape the old task-context.md had. */
+export function renderContextMarkdown(ctx: TriageContext, side: Group): string {
   const propertyName = new Map(ctx.properties.map((p) => [p.id, `${p.id} ${p.name}`]));
   const manual = ctx.labels.filter((l) => l.manualOnly);
   const enabledRules = ctx.rules.filter((r) => r.enabled);
@@ -148,7 +166,7 @@ export function renderContextMarkdown(ctx: TriageContext): string {
     "# Triage context",
     "",
     `Updated ${ctx.updatedAt ?? "never"}${ctx.updatedBy ? ` by ${ctx.updatedBy}` : ""}. Edited on the triage app's Rules page — never by hand.`,
-    "Tasks live in Google Tasks (shared Gmail) and Microsoft To Do (Outlook) — the mailbox decides; nothing here picks a list.",
+    SIDE_LINE[side],
     "",
     "## 1. Properties",
     "",
@@ -164,7 +182,7 @@ export function renderContextMarkdown(ctx: TriageContext): string {
     "",
     "## 3. Gmail labels",
     "",
-    "Shared mailbox only (`gabrielandarina@gmail.com`). Outlook has no labels.",
+    side === "gabriel" ? "Not used on this side — Outlook has no labels." : "Shared mailbox only (`gabrielandarina@gmail.com`). Outlook has no labels.",
     "",
     "### 3.1 Label registry",
     "",

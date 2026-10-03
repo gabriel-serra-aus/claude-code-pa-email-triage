@@ -4,9 +4,22 @@
 // know about survives a round trip — "never drop a key you don't understand".
 import { z } from "zod";
 
+/** The two sides. Each has its own session, context and summary — never mixed. */
 export const GROUPS = ["gabriel", "gabriel-arina"] as const;
 export const GroupSchema = z.enum(GROUPS);
 export type Group = z.infer<typeof GroupSchema>;
+
+/** A `?side=` value, or null for anything that is not exactly one of the two. */
+export function parseSide(value: string | null): Group | null {
+  const parsed = GroupSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
+/** Emails by `source`, tasks and newTasks by `provider` — which side an item belongs to. */
+export function groupOf(item: { source: string } | { provider: string }): Group {
+  if ("source" in item) return item.source === "gmail" ? "gabriel-arina" : "gabriel";
+  return item.provider === "gtasks" ? "gabriel-arina" : "gabriel";
+}
 
 export const GroupStatusSchema = z.enum([
   "pending-review",
@@ -42,10 +55,10 @@ const GroupEntrySchema = z.looseObject({
   processedAt: isoDate.nullable(),
 });
 
-// Exactly two keys, never a third one.
+// Exactly one key: the session's side (checkSession enforces which).
 const GroupsSchema = z.strictObject({
-  gabriel: GroupEntrySchema,
-  "gabriel-arina": GroupEntrySchema,
+  gabriel: GroupEntrySchema.optional(),
+  "gabriel-arina": GroupEntrySchema.optional(),
 });
 
 /** suggestedTask / decision.task — the task a "create-task" head will create. */
@@ -129,6 +142,7 @@ export type NewTask = z.infer<typeof NewTaskSchema>;
 
 export const SessionSchema = z
   .looseObject({
+    side: GroupSchema,
     generatedAt: isoDate,
     mailboxes: z.array(z.string()),
     gmailLabels: z.array(z.string()),
@@ -139,9 +153,18 @@ export const SessionSchema = z
   })
   .refine((s) => !("status" in s), "there is no session-level status — only groups.<g>.status");
 export type Session = z.infer<typeof SessionSchema>;
+export type GroupEntry = z.infer<typeof GroupEntrySchema>;
+
+/** The session's one review entry, `groups[side]`. checkSession guarantees it exists. */
+export function entryOf(session: Session): GroupEntry {
+  const entry = session.groups[session.side];
+  if (!entry) throw new Error(`session has no groups.${session.side}`);
+  return entry;
+}
 
 /** `session_begin` input. */
 export const BeginSchema = z.object({
+  side: GroupSchema,
   generatedAt: isoDate,
   mailboxes: z.array(z.string()),
   gmailLabels: z.array(z.string()),
@@ -228,7 +251,8 @@ function taskProblems(t: Task): string[] {
 }
 
 /**
- * Whole-session check: the zod schema plus every invariant of the contract.
+ * Whole-session check: the zod schema plus every invariant of the contract,
+ * including "one side only" (groups has just the side's key, every item is that side's).
  * Used by `session_publish` on the draft and by `PUT /api/session` on the body.
  * Returns `path: problem` lines; empty = valid.
  */
@@ -237,6 +261,21 @@ export function checkSession(doc: unknown): string[] {
   if (!result.success) return issueLines(result.error, "session");
   const session = result.data;
   const problems: string[] = [];
+
+  const groupKeys = Object.keys(session.groups);
+  if (groupKeys.length !== 1 || groupKeys[0] !== session.side) {
+    problems.push(`groups: exactly one key, the session's side "${session.side}" — got ${groupKeys.length ? groupKeys.join(", ") : "none"}`);
+  }
+  const wrongSide = (name: string, field: string, value: string) => `${name}.${field}: "${value}" is not on the ${session.side} side`;
+  session.emails.forEach((e, i) => {
+    if (groupOf(e) !== session.side) problems.push(wrongSide(itemName("emails", i, e, "id"), "source", e.source));
+  });
+  session.existingTasks.forEach((t, i) => {
+    if (groupOf(t) !== session.side) problems.push(wrongSide(itemName("existingTasks", i, t, "key"), "provider", t.provider));
+  });
+  session.newTasks.forEach((t, i) => {
+    if (groupOf(t) !== session.side) problems.push(wrongSide(`newTasks[${i}]`, "provider", t.provider));
+  });
 
   const heads = new Map<string, number>();
   const ids = new Set<string>();
